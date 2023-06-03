@@ -1,0 +1,4 @@
+Hda(HEH-1122 <-> HEH-1125) ang. =     15.358 deg.; Hda =  8.000 meV
+Hda(HEH-1125 <-> HEH-1128) ang. =    112.297 deg.; Hda =  2.000 meV
+Hda(HEH-1128 <-> HEH-1131) ang. =     13.491 deg.; Hda =  8.000 meV
+Hda(HEH-1131 <-> HEH-1134) ang. =    116.152 deg.; Hda =  2.000 meV
