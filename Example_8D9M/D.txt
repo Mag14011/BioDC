@@ -1,0 +1,1 @@
+Diffusion constant = 6.645082E-09 cm^2/S
