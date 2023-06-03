@@ -6,7 +6,7 @@ import math
 import numpy as np
 
 ################################################################################################################################################
-# Written by Matthew J. Guberman-Pfeffer on 05/23 - 05/28/2023 
+# Written by Matthew J. Guberman-Pfeffer on 05/23 - 06/02/2023 
 ################################################################################################################################################
 
 ################################################################################################################################################
@@ -727,47 +727,54 @@ def LambdaFromSASA(Output):
         Rd=4.6; Ra=4.6;
         Eopt=1.84 
 
+        Dsasa = [0]*(len(HEH)-1)
+        Asasa = [0]*(len(HEH)-1)
         TotalSASA = [0]*(len(HEH)-1)
         Es = [0]*(len(HEH)-1)
         M = [0]*(len(HEH)-1)
+        Rda = [0]*(len(HEH)-1)
         R = [0]*(len(HEH)-1)
         Lambda = [0]*(len(HEH)-1)
         for idx in range(len(HEH)-1):
             with open(str(HEH[idx])+","+str(HEH[idx+1])+"_SASAanalysis.dat") as fp:
+               #print(str(HEH[idx])+","+str(HEH[idx+1])+"_SASAanalysis.dat")
                 Lines = fp.readlines()
                 for line in Lines:
-                    Dsasa = float(line.strip().split(" ")[1])
-                    Asasa = float(line.strip().split(" ")[2])
-                    Rda = float(line.strip().split(" ")[3])
+                   #print(line)
+                    Dsasa[idx] = float(line.strip().split(" ")[1])
+                    Asasa[idx] = float(line.strip().split(" ")[2])
+                    Rda[idx] = float(line.strip().split(" ")[3])
+                   #print(Dsasa, Asasa, Rda)
 
-            TotalSASA[idx] = Dsasa + Asasa
+            TotalSASA[idx] = Dsasa[idx] + Asasa[idx]
             Es[idx] = alpha + (beta * TotalSASA[idx])
             M[idx] = (1/Eopt) - (1/Es[idx])
-            R[idx] = (1/((2*Rd)/0.53)) + (1/((2*Ra)/0.53)) - (1/(Rda/0.053))
+            R[idx] = (1/((2*Rd)/0.53)) + (1/((2*Ra)/0.53)) - (1/(Rda[idx]/0.53))
             Lambda[idx] = ((-1)**2) * (M[idx]) * (R[idx]) * (27.2114)
+           #print(TotalSASA[idx], Es[idx], M[idx], R[idx], Lambda[idx])
 
         for idx in range(len(HEH)-1):
             if (idx == 0):
                 print(""" 
- ---------------------------- 
+ HEH-%0d -> HEH-%0d --------- 
  Dsasa     = %.3f
  Asasa     = %.3f
  Rda       = %.3f
  TotalSASA = %.3f
  Es        = %.3f
  ----------------------------
- Reorg. Eng. = %.3f""" %(Dsasa, Asasa, Rda, TotalSASA[idx], Es[idx], Lambda[idx]), file=open('Lambda.txt', 'w'))
+ Reorg. Eng. = %.3f""" %(HEH[idx], HEH[idx+1], Dsasa[idx], Asasa[idx], Rda[idx], TotalSASA[idx], Es[idx], Lambda[idx]), file=open('Lambda.txt', 'w'))
 
             if (idx != 0):
                 print(""" 
- ---------------------------- 
+ HEH-%0d -> HEH-%0d --------- 
  Dsasa     = %.3f
  Asasa     = %.3f
  Rda       = %.3f
  TotalSASA = %.3f
  Es        = %.3f
  ----------------------------
- Reorg. Eng. = %.3f""" %(Dsasa, Asasa, Rda, TotalSASA[idx], Es[idx], Lambda[idx]), file=open('Lambda.txt', 'a'))
+ Reorg. Eng. = %.3f""" %(HEH[idx], HEH[idx+1], Dsasa[idx], Asasa[idx], Rda[idx], TotalSASA[idx], Es[idx], Lambda[idx]), file=open('Lambda.txt', 'a'))
 
     print(" Done!")
 
@@ -787,7 +794,7 @@ def DeltaGFromPBSA(Output, Solv):
   epsin=5.19, epsout=78.2, smoothopt=1, istrng=100, pbtemp=300, radiopt=0, dprob=1.4, iprob=2.0, sasopt=0, saopt=1,
   npbopt=0, solvopt=1, accept=0.001, maxitn=100, fillratio=1.5, space=0.5, nfocus=2, fscale=8, npbgrid=1,
   bcopt=5, eneopt=2, frcopt=2, scalec=0, cutfd=5, cutnb=0,
-  isurfchg=1, npbverb=1,
+  !isurfchg=1, npbverb=1,
   !#phiout=1, phiform=2, outlvlset=true,
  /
     """, file=open('pbsa.key', 'w'))
@@ -1369,7 +1376,7 @@ print("""
               (polymeric) multi-heme cytochormes 
 
             Written by Matthew J. Guberman-Pfeffer
-                Last Updated: 05/28/2023
+                Last Updated: 06/02/2023
 
  This research was supported by the National Institute of General 
  Medical Sciences of the National Institutes of Health under award
@@ -1604,7 +1611,7 @@ if (DivSel == 0) or (DivSel == 2):
         if (CompHda == 'Yes') or (CompHda == "yes") or (CompHda == "Y") or (CompHda == "y"):
             Hda = AssignCouplingFromGeom(Output)
             break
-        elif (CompDG == 'No') or (CompDG == "no") or (CompDG == "N") or (CompDG == "n"):
+        elif (CompHda == 'No') or (CompHda == "no") or (CompHda == "N") or (CompHda == "n"):
             print("""
  An array where each eleemnt is the Hda for a charge transfer is needed.""")
 
