@@ -1,0 +1,4 @@
+Hda(HEH-942 <-> HEH-939) ang. =    109.688 deg.; Hda =  2.000 meV
+Hda(HEH-939 <-> HEH-936) ang. =     12.651 deg.; Hda =  8.000 meV
+Hda(HEH-936 <-> HEH-933) ang. =    114.051 deg.; Hda =  2.000 meV
+Hda(HEH-933 <-> HEH-954) ang. =      5.672 deg.; Hda =  8.000 meV
