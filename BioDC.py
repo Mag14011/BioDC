@@ -4,6 +4,8 @@ import subprocess
 from subprocess import Popen
 import math 
 import numpy as np
+import derrida
+from pandas import read_csv
 
 ################################################################################################################################################
 # Written by Matthew J. Guberman-Pfeffer on 05/23 - 06/02/2023 
@@ -1277,16 +1279,23 @@ def ComputeMarcusRates(Hda, Lambda, DG):
         Reverse: %.3E\n""" %(idx, Eactf[idx], Eactb[idx], ketf[idx], ketb[idx]), end=" ")
 
         if (idx == 0):
-            print("%.3E,%3E" %(ketf[idx], ketb[idx]), file=open("rates.txt", "w"))
+            print("ketf,ketb", file=open("rates.txt", "w"))
+            print("%.3E,%3E" %(ketf[idx], ketb[idx]), file=open("rates.txt", "a"))
         else:
             print("%.3E,%3E" %(ketf[idx], ketb[idx]), file=open("rates.txt", "a"))
 
 ################################################################################################################################################
 
 def ComputeDiffusionCoefficient():
-    subprocess.run("make 2> /dev/null", shell=True)
-    subprocess.run("./derrida 2> /dev/null", shell=True)
+#   subprocess.run("make 2> /dev/null", shell=True)
+#   subprocess.run("./derrida 2> /dev/null", shell=True)
 
+    data = read_csv("rates.txt")
+    ketf = data['ketf'].tolist()
+    ketb = data['ketb'].tolist()
+    V,D = derrida.VD(ketf, ketb)
+    print(" Diffusion constant = %E cm^2/S" % (2.5e-15 * D))
+    print("Diffusion constant = %E (cm^2/S" % (2.5e-15 * D), file=open('D.txt', 'w'))
 ################################################################################################################################################
 
 def MeasureSubunitLength():
@@ -1376,7 +1385,7 @@ print("""
               (polymeric) multi-heme cytochormes 
 
             Written by Matthew J. Guberman-Pfeffer
-                Last Updated: 06/02/2023
+                Last Updated: 07/19/2023
 
  This research was supported by the National Institute of General 
  Medical Sciences of the National Institutes of Health under award
@@ -1685,9 +1694,8 @@ if (DivSel == 0) or (DivSel == 3):
         print("""
  Found rates.txt, which is needed to proceed!
 
- We will now compile and run a C-program kindly provided by
- Dr. Fredrik Jansson that has been modified only to 
- interface I/O operations with the BioDC program""")
+ We will now compute the single-particle diffusion coefficient. 
+ """)
         ComputeDiffusionCoefficient()
     else:
         sys.exit("""
