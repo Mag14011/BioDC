@@ -5,10 +5,11 @@ from subprocess import Popen
 import math 
 import numpy as np
 import derrida
+import blumberger     
 from pandas import read_csv
 
 ################################################################################################################################################
-# Written by Matthew J. Guberman-Pfeffer on 05/23 - 06/02/2023 
+# Written by Matthew J. Guberman-Pfeffer on 05/23 - 06/02/2023; latest revision: 08/30/2023 
 ################################################################################################################################################
 
 ################################################################################################################################################
@@ -580,16 +581,16 @@ def ReorderResByChain(Output):
 parm %s.prmtop
 trajin min.rst7
 fixatomorder parmout %s_reord.prmtop
-trajout min.rst7
+trajout %s_reord.rst7 topresnum
 run
 quit
-    """ %(Output, Output), file=open("ReorderRes.in", "w"))
+    """ %(Output, Output, Output), file=open("ReorderRes.in", "w"))
 
     if (os.path.isfile("%s_reord.prmtop" %(Output)) == True):
         print("\n Found the reordered topology: %s_reord.prmtop!" %(Output))
     if (os.path.isfile("%s_reord.prmtop" %(Output)) == False):
         subprocess.run("cpptraj -i ReorderRes.in > ReorderRes.log 2> /dev/null", shell=True)
-        subprocess.run("ambpdb -p %s_reord.prmtop -c min.rst7 > min.pdb" %(Output), shell=True)
+#       subprocess.run("ambpdb -p %s_reord.prmtop -c min.rst7 > min.pdb" %(Output), shell=True)
 
     Output = Output+"_reord"
 
@@ -1298,6 +1299,16 @@ def ComputeDiffusionCoefficient():
     print("Diffusion constant = %E (cm^2/S" % (2.5e-15 * D), file=open('D.txt', 'w'))
 ################################################################################################################################################
 
+def ComputeFlux():
+    data = read_csv("rates.txt")
+    ketf = data['ketf'].tolist()
+    ketb = data['ketb'].tolist()
+
+    Jf,Jb = blumberger.flux(ketf, ketb)
+    print("Forward Flux: %.2E" %(Jf)) 
+    print("Reverse Flux: %.2E" %(Jb))
+################################################################################################################################################
+
 def MeasureSubunitLength():
 
     idx = 0
@@ -1385,11 +1396,8 @@ print("""
               (polymeric) multi-heme cytochormes 
 
             Written by Matthew J. Guberman-Pfeffer
-                Last Updated: 07/19/2023
+                Last Updated: 08/30/2023
 
- This research was supported by the National Institute of General 
- Medical Sciences of the National Institutes of Health under award
- 1F32GM142247-01A1.
  ================================================================== 
 
  BioDC presents a highly modular workflow that has three 
@@ -1682,18 +1690,68 @@ if (DivSel == 0) or (DivSel == 3):
 
     print("""
  This division of the BioDC workflow computes, via the analytical
- Derrida formula, the charge diffuction coefficient based on the 
- non-adiabatic Marcus theory rates. The diffusion coefficient is
- then related to the electrical resistance and used in Ohm's law
- to compute the current as a function of applied bias. Note that 
- this approach is only rigorously correct in the limit of zero
- bias.
+ Derrida formula [Ref #1], the charge diffuction coefficient 
+ based on the non-adiabatic Marcus theory rates. The diffusion 
+ coefficient is then related to the electrical resistance and used 
+ in Ohm's law to compute the current as a function of applied bias
+ [Ref #2]. Note that this approach is only rigorously correct in 
+ the limit of zero bias and single (or non-interacting) mobile 
+ charges. The implementaiton of the Derrida formula was kindly 
+ provided by Fredrik Jansson [Refs #3 & #4].
+
+ To relax the single-particle condition, the multi-particle 
+ steady-state flux is computed according to an analytical 
+ expression derived by Blumberger and co-workers. The original code 
+ was kindly provided by Jochen Blumberger and Xiuyun Jiang.
+
+ References
+   [1] B. Derrida, 
+       "Velocity and diffusion constant of a periodic one-dimensional hopping model" 
+       J. Stat. Phys. 31, 433 (1983).
+
+   [2] M. J. Guberman-Pfeffer
+       "Assessing Thermal Response of Redox Conduction for Anti-Arrhenius Kinetics 
+       in a Microbial Cytochrome Nanowire"
+       J. Phys. Chem. B 2022, 126, 48, 10083–10097
+
+   [3] Thesis, F. Jansson, Charge transport in disordered materials -
+       simulations, theory, and numerical modeling of hopping transport and
+       electron-hole recombination. Åbo Akademi University, 2011
+       https://urn.fi/URN:NBN:fi-fe201311277464
+
+       Implementation details in section 3.6, especially a method to evaluate
+       the expressions in linear time. Application in section 6.2.
+
+   [4] Effect of Electric Field on Diffusion in Disordered Materials I.
+       One-dimensional Hopping Transport, A. V. Nenashev, F. Jansson,
+       S. D. Baranovskii, R. Österbacka, A. V. Dvurechenskii, F. Gebhard,
+       Phys. Rev. B 81, 115203 (2010)
+       http://dx.doi.org/10.1103/PhysRevB.81.115203
+
+   [5] M. Breuer, K. M. Rosso, and J. Blumberger, 
+       “Electron flow in multi-heme bacterial cytochromes is a balancing act 
+       between heme electronic interaction and redox potentials,”
+       Proc. Nat. Acad. Sci. USA, vol. 111, p. 611, 2014.
+
+   [6] X. Jiang, Z. Futera, M. E. Ali, F. Gajdos, G. F. von Rudorff, A. Carof, M. Breuer, and J. Blumberger, 
+       “Cysteine linkages accelerate electron flow through tetra-heme protein STC,” 
+       J. Am. Chem. Soc., vol. 139, p. 17237–17240, 2017.
+
+   [7] X. Jiang, J. H. van Wonderen, J. N. Butt, M. J. Edwards, T. A. Clarke, and J. Blumberger, 
+       “Which multi-heme protein complex transfers electrons more efficiently? Comparing MtrCAB from Shewanella 
+       with OmcS from Geobacter,” 
+       J. Phys. Chem. Lett., vol. 11, pp. 9421-9425, 2020.
     """, end=" ")
 
     if (os.path.isfile("rates.txt") == True):
         print("""
  Found rates.txt, which is needed to proceed!
 
+ We will now compute the multi-particle, stead-state flux.
+ """)
+        ComputeFlux()
+
+        print("""
  We will now compute the single-particle diffusion coefficient. 
  """)
         ComputeDiffusionCoefficient()
