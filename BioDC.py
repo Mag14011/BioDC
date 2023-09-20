@@ -1287,7 +1287,7 @@ def ComputeMarcusRates(Hda, Lambda, DG):
 
 ################################################################################################################################################
 
-def ComputeDiffusionCoefficient():
+def ComputeDiffusionCoefficient(AvgHemeSpacing):
 #   subprocess.run("make 2> /dev/null", shell=True)
 #   subprocess.run("./derrida 2> /dev/null", shell=True)
 
@@ -1295,8 +1295,8 @@ def ComputeDiffusionCoefficient():
     ketf = data['ketf'].tolist()
     ketb = data['ketb'].tolist()
     V,D = derrida.VD(ketf, ketb)
-    print(" Diffusion constant = %E cm^2/S" % (2.5e-15 * D))
-    print("Diffusion constant = %E (cm^2/S" % (2.5e-15 * D), file=open('D.txt', 'w'))
+    print("  Diffusion constant = %E cm^2/S"  % (D * ((AvgHemeSpacing)**2))) 
+    print("Diffusion constant = %E (cm^2/S)" % (D * ((AvgHemeSpacing)**2)), file=open('D.txt', 'w'))
 ################################################################################################################################################
 
 def ComputeFlux():
@@ -1350,18 +1350,24 @@ def ComputeRedoxCurrent():
     kb=1.38E-23    #J/k
 
     print(" Please provide the following parmaeters: ")
-    T = float(input("  Temperature (K)? "))
-    cps = int(input("  Number of Charges per subunit? "))
+    T   = float(input("  Temperature (K)? "))
+    cps   = int(input("  Number of charges per subunit? "))
+    ahs = float(input("  Average heme spacing (cm)? "))
+    
+    DiffusionCoefficient = ComputeDiffusionCoefficient(ahs)
+    
     SubunitLength = MeasureSubunitLength()
-#   lsub = float(input("  Length of subunit (cm)? "))
-    lsub = SubunitLength
+
     print(""" 
  The length of a subunit of the cytochrome polymer is needed.
   The subunit length measured between the first and the last heme
   specified in LinearizedHemeSequence.txt is %.2E \n""" %(SubunitLength))
 
+#   lsub = float(input("  Length of subunit (cm)? "))
+    lsub = SubunitLength
+
     lw = float(input("  Length of wire (cm)? "))
-    Gexp = float(input("""  Experimental Conductance (S/cm) ? \n   (Enter "0" if not known)         """))
+    Gexp = float(input("""  Experimental Conductance (S) ? \n   (Enter "0" if not known)         """))
     
     if (os.path.isfile("D.txt") == True):
         with open("D.txt") as fp:
@@ -1751,10 +1757,10 @@ if (DivSel == 0) or (DivSel == 3):
  """)
         ComputeFlux()
 
-        print("""
- We will now compute the single-particle diffusion coefficient. 
- """)
-        ComputeDiffusionCoefficient()
+#       print("""
+#We will now compute the single-particle diffusion coefficient. 
+#""")
+#       ComputeDiffusionCoefficient()
     else:
         sys.exit("""
  rates.txt not found! Please run division #2 of the BioDC 
@@ -1766,9 +1772,8 @@ if (DivSel == 0) or (DivSel == 3):
  transfer steps. 
         """)
 
-    if (os.path.isfile("D.txt") == True):
+    if (os.path.isfile("rates.txt") == True):
         print("""
- Found D.txt, which is needed to proceed!
  We will at last compute the redox current. 
  To do this, some system-specific information is needed.
         """)
