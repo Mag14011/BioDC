@@ -9,7 +9,7 @@ import blumberger
 from pandas import read_csv
 
 ################################################################################################################################################
-# Written by Matthew J. Guberman-Pfeffer on 05/23 - 06/02/2023; latest revision: 09/19/2023 
+# Written by Matthew J. Guberman-Pfeffer on 05/23 - 06/02/2023; latest revision: 08/30/2023 
 ################################################################################################################################################
 
 ################################################################################################################################################
@@ -1305,8 +1305,13 @@ def ComputeFlux():
     ketb = data['ketb'].tolist()
 
     Jf,Jb = blumberger.flux(ketf, ketb)
+    Javg = (Jf+Jb)/2
+
     print("Forward Flux: %.2E" %(Jf)) 
     print("Reverse Flux: %.2E" %(Jb))
+    print("Average forward/backward Flux: %.2E" %(Javg))
+
+    return Jf, Jb, Javg
 ################################################################################################################################################
 
 def MeasureSubunitLength():
@@ -1346,13 +1351,17 @@ def MeasureSubunitLength():
 def ComputeRedoxCurrent():
 
     r=0.75E-7      #cm
+    c=3.00E10      #cm/s
     e=1.602E-19    #c
     kb=1.38E-23    #J/k
+    hbar=1.05E-34  #J/s 
+    deltabar=3     #cm^-1
 
     print(" Please provide the following parmaeters: ")
-    T   = float(input("  Temperature (K)? "))
-    cps   = int(input("  Number of charges per subunit? "))
-    ahs = float(input("  Average heme spacing (cm)? "))
+    T    = float(input("  Temperature (K)? "))
+    cps    = int(input("  Number of charges per subunit? "))
+    ahs  = float(input("  Average heme spacing (cm)? "))
+    Ncnt = float(input("  Fewest number of contacts at either protein-electrode interface? "))
     
     DiffusionCoefficient = ComputeDiffusionCoefficient(ahs)
     
@@ -1368,7 +1377,7 @@ def ComputeRedoxCurrent():
 
     lw = float(input("  Length of wire (cm)? "))
     Gexp = float(input("""  Experimental Conductance (S) ? \n   (Enter "0" if not known)         """))
-    
+
     if (os.path.isfile("D.txt") == True):
         with open("D.txt") as fp:
             Dcalc = float(fp.readline().strip().split()[3])
@@ -1376,15 +1385,51 @@ def ComputeRedoxCurrent():
     cpsul = ((cps)/(lsub))
     csa = (math.pi * (r)**2) 
     crgden = (cpsul)/(csa)
+
+    u_dif = (Dcalc)*(e/(kb*T))
+    s_dif = e*(crgden)*(u_dif)
+    
+    V = ((1E12)*(e))/Gexp
+    s_flx = ((Javg*e*Ncnt*lw)/(V*csa)) 
+    u_flx = s_flx/((e)*(crgden))
+
+    u_bt = (e)*(ahs**2)/(2*hbar)
+    s_bt = (e)*(crgden)*(u_bt)
+
+    u_hp = (((2)*(math.pi)*(c)*(e)*(ahs**2))/((kb)*(T)))*(deltabar)
+    s_hp = (e)*(crgden)*(u_hp)
+
+    Sexp = Gexp*(lw/csa)
     Dexp = ((Gexp * kb * T * lw) / (csa * crgden * (e)**2))
 
     print("""
- Charge per Subunit Length          = %e q/cm 
- Cross-Sectional Area               = %e cm^2
- Charge Density                     = %e q/cm^2
- Experimental Diffusion Constant    = %e cm^2/s
- Computed Diffusion Constant        = %e cm^2/s
-    """ %(cpsul, csa, crgden, Dexp, Dcalc))
+ Entered Quantities 
+   Temperature                                  = %.1f K    
+   Average Heme Spacing                         = %e cm
+   Charge per Subunit Length                    = %e q/cm 
+   Length of Filament                           = %e cm 
+   Fewest number of protein-electrode contacts  = %e cm 
+   Experimental Conductance                     = %s S
+
+ Computed Quantities  
+   Cross-Sectional Area                         = %e cm^2
+   Charge Density                               = %e q/cm^2
+
+   Diffusion Constant                           = %e cm^2/s
+   Diffusive Charge Mobility                    = %e cm^2/Vs
+   Diffusive Conductivity                       = %e S/cm
+   Steady-State Mobility                        = %e cm^2/Vs
+   Steady-State Conductivity                    = %e S/cm
+
+   Band-Theory Minimum Mobility                 = %e cm^2/Vs
+   Band-Theory Minimum Conductivity             = %e S/cm
+   Hopping Tranport Maximum Mobility            = %e cm^2/Vs
+   Hopping Tranport Maximum Conductivity        = %e S/cm
+
+ Experiment-based Quantities  
+   Experimental Conductivity                    = %s S/cm
+   Experimental Diffusion Constant              = %e cm^2/s
+    """ %(T, ahs, cps, lw, Ncnt, Gexp, csa, crgden, Dcalc, u_dif, s_dif, u_flx, s_flx, u_bt, s_bt, u_hp, s_hp, Sexp, Dexp))
 
     print(" %6s %8s %8s" %("Voltage (V)", "Exp. Current (pA)", "Computed Current (pA)"))
     for V in np.arange (-0.5, 0.5, 0.05):
@@ -1402,7 +1447,7 @@ print("""
               (polymeric) multi-heme cytochormes 
 
             Written by Matthew J. Guberman-Pfeffer
-                Last Updated: 09/19/2023
+                Last Updated: 08/30/2023
 
  ================================================================== 
 
@@ -1755,7 +1800,7 @@ if (DivSel == 0) or (DivSel == 3):
 
  We will now compute the multi-particle, stead-state flux.
  """)
-        ComputeFlux()
+        Jf,Jb,Javg = ComputeFlux()
 
 #       print("""
 #We will now compute the single-particle diffusion coefficient. 
