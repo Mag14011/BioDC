@@ -4,50 +4,170 @@ import subprocess
 from subprocess import Popen
 import math 
 import numpy as np
+import derrida
+import blumberger     
+from pandas import read_csv
 
 ################################################################################################################################################
-# Written by Matthew J. Guberman-Pfeffer on 05/23 - 06/02/2023 
+# Written by Matthew J. Guberman-Pfeffer on 05/23 - 06/02/2023; latest revision: 10/30/2023 
 ################################################################################################################################################
 
 ################################################################################################################################################
 
-def CheckProgInPath():
+def Initialization():
 
     while True:
         ProgInPath = input("""
- This program requires VMD and the AmberTools package to be 
- in your system's PATH variable. Are they? (yes/no)? """)
+ This program requires VMD and the Amber Molecular Dynamics Suite 
+ to be in your system's PATH variable. Are they? (yes/no)? """)
 
-        if (ProgInPath == 'Yes') or (ProgInPath == "yes") or (ProgInPath == "Y") or (ProgInPath == "y"):
+        if (ProgInPath == 'YES') or (ProgInPath == 'Yes') or (ProgInPath == "yes") or (ProgInPath == "Y") or (ProgInPath == "y"):
             print(""" 
  Good! Now, here are the PDBs in the present direcotry:\n""")
-            return ProgInPath
-            break
-        elif (ProgInPath == "No") or (ProgInPath == "no") or (ProgInPath == "N") or (ProgInPath == "n"):
-            sys.exit("""
- Please make VMD findalbe in your system PATH variable 
- and then re-run this program \n""")
-        else: 
-            print(" Sorry, I didn't understand your response.")
 
-################################################################################################################################################
+            for x in os.listdir():
+                if x.endswith(".pdb"):
+                    print(x)
 
-def InitialStructureSelection():
-    for x in os.listdir():
-        if x.endswith(".pdb"):
-            print(x)
-
-    while True:
-        OriginalPDB = input("""
+            while True:
+                OriginalPDB = input("""
  Which PDB would you like to setup 
  (omit the .pdb file extension)? """)
 
-        if (os.path.isfile(OriginalPDB + ".pdb") == True):
-            print(" That PDB was found! ")
-            return OriginalPDB
+                if (os.path.isfile(OriginalPDB + ".pdb") == True):
+                    print("\n That PDB was found! ")
+
+                    while True:
+                        ConsecResID = input("\n Does the PDB have consecutive residue numbering? ")
+
+                        if (ConsecResID == "YES") or (ConsecResID == "Yes") or (ConsecResID == "yes") or (ConsecResID == "Y") or (ConsecResID == "y"):
+                            print(" Perfect! That is exactly what's needed to use this module.")
+                            break
+                        elif (ConsecResID == "NO") or (ConsecResID == "No") or (ConsecResID == "no") or (ConsecResID == "N") or (ConsecResID == "n"):
+                            sys.exit("""
+ To use this module, please renumber the residues 
+ in the PDB to have consecutive IDs. 
+
+ This can be done, for example, with the pdb-tools 
+ at the GitHub repository 
+ https://github.com/haddocking/pdb-tools 
+ using the following command:
+ pdb_reres original_filename.pdb > new_filename.pdb \n""")
+                        else:
+                            print("Sorry, I didn't understand your response")
+
+                    return OriginalPDB
+                    break
+                else: 
+                    print("\n That PDB does not exist unfortunately")
             break
+        elif (ProgInPath == "NO") or (ProgInPath == "No") or (ProgInPath == "no") or (ProgInPath == "N") or (ProgInPath == "n"):
+            sys.exit("""
+ Please make VMD and the Amber Molecular Dynamics Suite 
+ findalbe in your system PATH variable. Then, please 
+ re-run this program \n""")
         else: 
-            print(" That PDB does not exist unfortunately")
+            print("\n Sorry, I didn't understand your response.")
+
+################################################################################################################################################
+
+################################################################################################################################################
+
+def SelectpHActiveSites(PDB):
+    print(""" 
+ Residues ASP, GLU, LYS, HIS, and TYR, can be titrated.""")
+        
+    print(""" 
+ For each titrateable residue type, please give 
+ a space-separated list of the residue IDs of the
+ sites you would like titrated during molecular 
+ dynamics.""")
+
+    for RES in "ASP", "GLU", "HIS", "LYS", "TYR":
+        print(f"\n The IDS of possible titratable {RES} residues are: ", end=" ")
+
+        RESID = []
+        if (os.path.isfile(f"{PDB}.pdb") == True):
+            with open(f'{PDB}.pdb', 'r') as fp:
+                lines = fp.readlines()
+                for line in lines:
+                    word1 = f"CA  {RES}"
+
+                    if (line.find(word1) != -1):
+                        RESID.append(int(line.strip().split()[5]))
+        print(' '.join(map(str,RESID)))
+
+        if (RES == "ASP"):
+            SelASPIDs = input(f"  pH active {RES} residue IDs: ")
+        elif (RES == "GLU"):
+            SelGLUIDs = input(f"  pH active {RES} residue IDs: ")
+        elif (RES == "HIS"):
+            SelHISIDs = input(f"  pH active {RES} residue IDs: ")
+        elif (RES == "LYS"):
+            SelLYSIDs = input(f"  pH active {RES} residue IDs: ")
+        elif (RES == "TYR"):
+            SelTYRIDs = input(f"  pH active {RES} residue IDs: ")
+
+    return SelASPIDs, SelGLUIDs, SelHISIDs, SelLYSIDs, SelTYRIDs 
+
+################################################################################################################################################
+
+################################################################################################################################################
+
+def SelectDisulfides():
+    while True:
+        try:
+            NumDisulfide = int(input(" How many disulfide linkages are present? "))
+        except ValueError:
+            print(" Your entry must be an integer.")
+        else:
+            break
+
+    if (NumDisulfide != 0):
+        print(" For each disulfide bond, please enter the pair of Cys residue IDs.")
+
+        idx = 0
+        DisulfResList = " "
+        DisulfPairID = [0]*NumDisulfide
+        for n in range(NumDisulfide):
+            SelPairIDs = input(f"  Disulfide-linked Cys pair {idx+1}: ")
+            DisulfResList += SelPairIDs+" "
+            DisulfPairID[idx] = list(map(int,SelPairIDs.split(' ')))
+
+            idx+=1
+
+    return DisulfResList, DisulfPairID
+
+################################################################################################################################################
+
+################################################################################################################################################
+
+def Mutate(PDB):
+
+    OrigResName = input(" What is the three-letter code residue name before the mutaiton? ")
+    MutResID = int(input(" What is the residue ID of the point mutation? "))
+    MutResName = input(" What is the three-letter code residue name after the mutaiton? ")
+
+    if (os.path.isfile(f"{OrigResName}-{MutResID}-{MutResName}.tcl") == True):
+        subprocess.run(f"vmd -e {OrigResName}-{MutResID}-{MutResName}.tcl > {OrigResName}-{MutResID}-{MutResName}.log", shell=True)
+    elif (os.path.isfile(f"{OrigResName}-{MutResID}-{MutResName}.tcl") == False):
+
+        print(f"""
+mol new {PDB}.pdb
+
+set res [atomselect top "resname {OrigResName} and resid {MutResID}"]
+$res set resname {MutResName}
+
+set mut [atomselect top "(all and not resid {MutResID}) or (not sidechain and resid {MutResID})"]
+$mut writepdb {OrigResName}-{MutResID}-{MutResName}.pdb
+exit
+        """, file=open(f"{OrigResName}-{MutResID}-{MutResName}.tcl", 'w'))
+
+        print(f"\n Generating PDB for {OrigResName}-{MutResID}-{MutResName} mutant ...")
+        subprocess.run(f"vmd -e {OrigResName}-{MutResID}-{MutResName}.tcl > {OrigResName}-{MutResID}-{MutResName}.log", shell=True)
+    PDB = f"{OrigResName}-{MutResID}-{MutResName}"
+
+    return PDB
 
 ################################################################################################################################################
 
@@ -65,7 +185,7 @@ def CreateResIndexing(PDB):
  Would you like to create it automatically or manually (auto/man)? """)
 
             if (CreateResIndexingMethod == "auto"):
-                DistThresh = input("""
+                print ("""
  The automated creation of ResIndexing.txt has two parts:
    1) Writting CreateResIndexing.tcl 
    2) Submitting the TCL script to Visual Molecular Dynamics (VMD)
@@ -74,18 +194,31 @@ def CreateResIndexing(PDB):
  distance cutoff of each heme group and assumes that the residues 
  found within that cutoff are bonded to that heme.
 
- What distance threshold would you liek to use? 
- (recommended = 2.5 angstroms)                  """)
+ The distance cutoff is incremented by 0.1 Å from the a minimum 
+ value until two His and two Cys are found near each heme. The
+ distance thresholds are incremented independently for the His
+ residues and the Cys residues.
+
+ A recommended minimum distance is 2.0 Å. """)
+
+                while True:
+                    try:
+                        DistThresh = float(input("""
+ What minimum distance threshold would you like to use? """))
+                    except ValueError: 
+                        print(" Your entry needs to be an integer. \n")
+                    else:
+                        break
 
                 print("""
  Please make sure that the correct residues are identified by, 
  for example, creating representations in VMD with the residue IDs 
- givenon each line of the ResIndexing.txt file. 
+ given on each line of the ResIndexing.txt file. 
 
  If the wrong residues are identified, the setup later with TLEaP 
  will fail because the bond definitions will be wrong. In this case, 
  please correct the residue IDs and save the changes to 
- CorrectedResIndexing.txt. When you re-run this python scirpt, the
+ CorrectedResIndexing.txt. When you re-run BioDC the
  CorrectedResIndexing.txt file will be detected and used to replace
  ResIndexing.txt. 
                 """)
@@ -107,8 +240,25 @@ def CreateResIndexing(PDB):
     $heme set resid $ShiftHResID
 
     set NewHResID [expr {$HResID + ($i * 2)}]
-    set HIS [lsort -integer [[atomselect top "resname HIS and name NE2 and within $DistThresh of resname HEC HEM and resid $ShiftHResID"] get resid]]
-    set CYS [lsort -integer [[atomselect top "resname CYS and name SG  and within $DistThresh of resname HEC HEM and resid $ShiftHResID"] get resid]]
+
+    set NumHIS {0}  
+    set DistThreshHIS $DistThresh
+    while {$NumHIS != 2} {
+      set HIS [lsort -integer [[atomselect top "resname HIS and name NE2 and within $DistThreshHIS of resname HEC HEM and resid $ShiftHResID"] get resid]]
+      set NumHIS [llength $HIS]
+      set DistThreshHIS [expr {$DistThreshHIS+0.1}]
+    }
+    puts "$ShiftHResID | $DistThreshHIS | $NumHIS | $HIS"
+
+    set NumCYS {0}  
+    set DistThreshCYS $DistThresh
+    while {$NumCYS != 2} {
+      set CYS [lsort -integer [[atomselect top "resname CYS and name SG  and within $DistThreshCYS of resname HEC HEM and resid $ShiftHResID"] get resid]]
+      set NumCYS [llength $CYS]
+      set DistThreshCYS [expr {$DistThreshCYS+0.1}]
+    }
+    puts "$ShiftHResID | $DistThreshCYS | $NumCYS | $CYS"
+
     set CYSb [lindex $CYS 0]
     set CYSc [lindex $CYS 1]
     set HISp [expr {$CYSc + 1}]
@@ -136,13 +286,13 @@ def CreateResIndexing(PDB):
         
                 subprocess.run("vmd -e CreateResIndexing.tcl > CreateResIndexing.log", shell=True)
                 break
-            elif (CreateResIndexingMethod == "man") or (CreateResIndexingMethod == "manual"): 
+            elif (CreateResIndexingMethod == "man") or (CreateResIndexingMethod == "Man") or (CreateResIndexingMethod == "manual") or (CreateResIndexingMethod == "Manual"): 
                 print("""
  To create ResIndexing.txt by hand:
     Create a txt file with an editor of your choosing (e.g. 
     vi ResIndexing.txt). In this file,there must be one line for 
     each heme cofactor in your structure. Each line should contain 
-    of six numbers separated by a single space. The first four 
+    six numbers separated by a single space. The first four 
     numbers from left-to-right should be the residue IDs for the
         (1) Cys attached to the B-ring of the heme macrocycle,
         (2) Cys attached to the C-ring of the heme macrocycle,
@@ -159,7 +309,7 @@ def CreateResIndexing(PDB):
     original PDB. (See the below example.)
 
     The sixth number is the residue ID the heme will be assigned in 
-    the final and properly formatted PDB for use with TLEap. This 
+    the final and properly formatted PDB for use with TLEaP. This 
     number should be the original residue ID for the heme + (i * 2), 
     where i is a zero-based index that counts the number of hemes 
     in your system.
@@ -198,26 +348,58 @@ def CreateResIndexing(PDB):
 def ProcessPDB(PDB):
     print("""
  Your ResIndexing file will now be used with VMD
- to create the HEH, HIO, and CYO residues.
- 
- We will write and submit a script called SetupStructure.tcl to 
- perform this magic.
+ to create the HEH, HIO, and CYO residues that 
+ specify a bis-histidine ligated heme in the 
+ AMBER force field.
 
- CAUTION: The magic of the script is only as good as the information 
- in ResIndexing.txt. If the wrong residue IDs are specified, 
- everything from hereon out will be, put politely, junk!
+ Also, if you specified any disuflide residues 
+ earlier, the participating Cys residues will 
+ be relabled as CYX, in accordance with AMBER
+ conventions. 
+
+ We will write and submit a script called 
+ SetupStructure.tcl to perform this magic.
+
+ CAUTION: The magic of the script is only 
+ as good as the information in ResIndexing.txt. 
+ If the wrong residue IDs are specified, everything 
+ from here on out will be, put politely, junk!
     """, end=" ")
 
     while True:
         ProcessPDBChoice = input(""" 
  Shall we venture forward with SetupStructure.tcl (yes/no)? """)
 
-        if (ProcessPDBChoice == "yes") or (ProcessPDBChoice == "Yes") or (ProcessPDBChoice == "y") or (ProcessPDBChoice == "Y"):
+        if (ProcessPDBChoice == "YES") or (ProcessPDBChoice == "Yes") or (ProcessPDBChoice == "yes") or (ProcessPDBChoice == "Y") or (ProcessPDBChoice == "y"):
             print("""
  #-------------------------------------------------------------
  #Input
  mol load pdb {}_renumd.pdb
  #-------------------------------------------------------------""".format(PDB), file=open('SetupStructure.tcl', 'w'))
+
+            if (len(DisulfList) != 0):
+                print(f"""
+ set DisulfCys [atomselect top "resname CYS and resid {DisulfList}"] 
+ $DisulfCys set resname CYX
+                """, file=open('SetupStructure.tcl', 'a'))
+
+            if (len(SelASPIDs) != 0):
+                print(f"""
+ set ASP [atomselect top "resname ASP and resid {SelASPIDs}"] 
+ $ASP set resname AS4
+                """, file=open('SetupStructure.tcl', 'a'))
+
+            if (len(SelGLUIDs) != 0):
+                print(f"""
+ set GLU [atomselect top "resname GLU and resid {SelGLUIDs}"] 
+ $GLU set resname GL4
+                """, file=open('SetupStructure.tcl', 'a'))
+
+            if (len(SelHISIDs) != 0):
+                print(f"""
+ set HIS [atomselect top "resname HIS HID HIE HIP and resid {SelHISIDs}"] 
+ $HIS set resname HIP
+                """, file=open('SetupStructure.tcl', 'a'))
 
             print("""
  set INPUT   [open  "ResIndexing.txt" r]
@@ -339,12 +521,12 @@ def ProcessPDB(PDB):
             subprocess.run("vmd -e SetupStructure.tcl > SetupStructure.log", shell=True)
             print("""
  VMD finished. Please check SetupStructure.log for any erros. You may 
- also want to inspect the generated PDBs for the protein,each heme, 
+ also want to inspect the generated PDBs for the protein, each heme, 
  and each heme propionic acid group.
             """, end=" ")
             break
 
-        elif (ProcessPDBChoice == "no") or (ProcessPDBChoice == "No") or (ProcessPDBChoice == "n") or (ProcessPDBChoice == "N"):
+        elif (ProcessPDBChoice == "NO") or (ProcessPDBChoice == "No") or (ProcessPDBChoice == "no") or (ProcessPDBChoice == "N") or (ProcessPDBChoice == "n"):
             sys.exit("""
  I'm sorry but I don't know how to proceed without running 
  SetupStructure.tcl using VMD. Hopefully this program was helpful 
@@ -377,6 +559,8 @@ def ReBuildStructure(PDB):
     with open("ResIndexing.txt") as fp:
         x = len(fp.readlines())
         HEH = [0]*x
+        PRNA = [0]*x
+        PRND = [0]*x
         HISp = [0]*x
         HISd = [0]*x
         CYSb = [0]*x
@@ -387,12 +571,17 @@ def ReBuildStructure(PDB):
 
         for line in Lines:
             HEH[idx] = int(line.strip().split(" ")[5])
+            PRNA[idx] = HEH[idx]+1
+            PRND[idx] = HEH[idx]+2
             HISp[idx] = int(line.strip().split(" ")[2])
             HISd[idx] = int(line.strip().split(" ")[3])
             CYSb[idx] = int(line.strip().split(" ")[0])
             CYSc[idx] = int(line.strip().split(" ")[1])
             idx += 1
     
+        PRNA = str(' '.join(map(str,PRNA)))
+        PRND = str(' '.join(map(str,PRND)))
+
         subprocess.run("cat prot.pdb > temp.pdb", shell=True)
 
         for res in HEH:
@@ -401,82 +590,111 @@ def ReBuildStructure(PDB):
             subprocess.run("cat PRND"+str(res)+".pdb >> temp.pdb", shell=True)
 
         subprocess.run("grep -v CRYST1 temp.pdb | grep -v END >"+OutPrefix+"-"+PDB+".pdb", shell=True)
+        Format = "sed -i '/OXT/a TER' "+OutPrefix+"-"+PDB+".pdb"
+        subprocess.run(Format, shell=True)
 
-    print("""
- source leaprc.constph
- source leaprc.conste
- source leaprc.water.tip3p
+    print(f"""
+# Load parameters 
+source leaprc.constph
+source leaprc.conste
+source leaprc.water.tip3p
+loadAmberParams frcmod.ionsjc_tip3p
 
- # Load parameters for ions
- loadAmberParams frcmod.ionsjc_tip3p
+# Load PDB
+%s = loadpdb %s-%s.pdb""" %(OutPrefix, OutPrefix, PDB), file=open('tleap.in', 'w'))
 
- # Load PDB
- %s = loadpdb %s-%s.pdb
+    print("""  
+# Connecting Cys residues for disulfides""", file=open('tleap.in', 'a'))
 
- # Connecting HEH to the protein""" %(OutPrefix, OutPrefix, PDB), file=open('tleap.in', 'w'))
+    if (len(DisulfArray) != 0):
+        for idx in range(len(DisulfArray)):
+            print(f" bond {OutPrefix}.{DisulfArray[idx][0]}.SG {OutPrefix}.{DisulfArray[idx][1]}.SG", file=open('tleap.in', 'a'))
 
+    print("""  
+# Connecting HEH to the protein""", file=open('tleap.in', 'a'))
     for idx in range(x):
         print("""
- bond %s.%0d.CB1 %s.%0d.CA""" %(OutPrefix, HEH[idx], OutPrefix, HISp[idx]), end=" ", file=open('tleap.in', 'a'))
+bond %s.%0d.CB1 %s.%0d.CA""" %(OutPrefix, HEH[idx], OutPrefix, HISp[idx]), end=" ", file=open('tleap.in', 'a'))
         print("""
- bond %s.%0d.CB2 %s.%0d.CA""" %(OutPrefix, HEH[idx], OutPrefix, HISd[idx]), end=" ", file=open('tleap.in', 'a'))
+bond %s.%0d.CB2 %s.%0d.CA""" %(OutPrefix, HEH[idx], OutPrefix, HISd[idx]), end=" ", file=open('tleap.in', 'a'))
         print("""
- bond %s.%0d.CBB2 %s.%0d.CA""" %(OutPrefix, HEH[idx], OutPrefix, CYSb[idx]), end=" ", file=open('tleap.in', 'a'))
+bond %s.%0d.CBB2 %s.%0d.CA""" %(OutPrefix, HEH[idx], OutPrefix, CYSb[idx]), end=" ", file=open('tleap.in', 'a'))
         print("""
- bond %s.%0d.CBC1 %s.%0d.CA""" %(OutPrefix, HEH[idx], OutPrefix, CYSc[idx]), end=" ", file=open('tleap.in', 'a'))
+bond %s.%0d.CBC1 %s.%0d.CA""" %(OutPrefix, HEH[idx], OutPrefix, CYSc[idx]), end=" ", file=open('tleap.in', 'a'))
         print("""
- bond %s.%0d.C2A %s.%0d.CA""" %(OutPrefix, HEH[idx], OutPrefix, HEH[idx]+1), end=" ", file=open('tleap.in', 'a'))
+bond %s.%0d.C2A %s.%0d.CA""" %(OutPrefix, HEH[idx], OutPrefix, HEH[idx]+1), end=" ", file=open('tleap.in', 'a'))
         print("""
- bond %s.%0d.C3D %s.%0d.CA""" %(OutPrefix, HEH[idx], OutPrefix, HEH[idx]+2), end=" ", file=open('tleap.in', 'a'))
+bond %s.%0d.C3D %s.%0d.CA""" %(OutPrefix, HEH[idx], OutPrefix, HEH[idx]+2), end=" ", file=open('tleap.in', 'a'))
 
     while True:
-        SolvEnv = input(""" Should the structure be prepared with 
- an explicit or implicit solvent (explicit/implicit)? """)
+        SolvEnv = input(""" 
+ Should the structure be prepared with 
+  an explicit or implicit solvent (explicit/implicit)? """)
 
-        if (SolvEnv == "explicit") or (SolvEnv == "Explicit") or (SolvEnv == "e") or (SolvEnv == "E"):
+        if (SolvEnv == "EXPLICIT") or (SolvEnv == "Explicit") or (SolvEnv == "explicit") or (SolvEnv == "E") or (SolvEnv == "e"):
             while True:
-                BoxShape = input("  Using a rectangular or an octahedral box (rec/octahed)? ")
-                BufferSize = int(input("  With how much of a solvent buffer (in angstroms)? "))
+                BoxShape = input(" Using a rectangular or an octahedral box (rec/oct)? ")
+
+                while True:
+                    try:
+                        BufferSize = int(input(" With how much of a solvent buffer (in angstroms)? "))
+                    except ValueError:
+                        print(" Your entry needs to be an integer. \n")
+                    else:
+                        break
             
-                if (BoxShape == "rectangular") or (BoxShape == "rec"):
+                if (BoxShape == "RECTANGULAR") or (BoxShape == "Rectangular") or (BoxShape == "rectangular") or (BoxShape == "REC") or (BoxShape == "Rec") or (BoxShape == "rec") or (BoxShape == "R") or (BoxShape == "r"):
                     print("""
 
- #Solvate
- solvateBox %s TIP3PBOX %0d""" %(OutPrefix, BufferSize), end=" ", file=open('tleap.in', 'a'))
+#Solvate
+solvateBox %s TIP3PBOX %0d""" %(OutPrefix, BufferSize), end=" ", file=open('tleap.in', 'a'))
                     break
-                elif (BoxShape == "octahedral") or (BoxShape == "octahed"):
+                elif (BoxShape == "OCTAHEDRAL") or (BoxShape == "Octahedral") or (BoxShape == "octahedral") or (BoxShape == "OCT") or (BoxShape == "Oct") or (BoxShape == "oct") or (BoxShape == "O") or (BoxShape == "o"): 
                     print("""
 
- #Solvate
- solvateOct %s TIP3PBOX %0d""" %(OutPrefix, BufferSize), end=" ", file=open('tleap.in', 'a'))
+#Solvate
+solvateOct %s TIP3PBOX %0d""" %(OutPrefix, BufferSize), end=" ", file=open('tleap.in', 'a'))
                     break
                 else:
-                    print("  Sorry, I didn't understand your response.")
+                    print(" Sorry, I didn't understand your response.")
 
-            NaCount = int(input("  And how many Na+ ions; 0 = enough for charge neutrality? "))
-            ClCount = int(input("  And how many Cl- ions; 0 = enough for charge neutrality? "))
+            while True:
+                try:
+                    NaCount = int(input(" And how many Na+ ions; 0 = enough for charge neutrality? "))
+                except ValueError:
+                    print(" Your entry needs to be an integer. \n")
+                else:
+                    break
+
+            while True:
+                try:
+                    ClCount = int(input(" And how many Cl- ions; 0 = enough for charge neutrality? "))
+                except ValueError:
+                    print(" Your entry needs to be an integer. \n")
+                else:
+                    break
 
             print("""
 
- #Add ions
- addions %s Na+ %0d""" %(OutPrefix, NaCount), end=" ", file=open('tleap.in', 'a'))
+#Add ions
+addions %s Na+ %0d""" %(OutPrefix, NaCount), end=" ", file=open('tleap.in', 'a'))
             print("""
- addions %s Cl- %0d""" %(OutPrefix, ClCount), end=" ", file=open('tleap.in', 'a'))
+addions %s Cl- %0d""" %(OutPrefix, ClCount), end=" ", file=open('tleap.in', 'a'))
 
             break
-        elif (SolvEnv == "implicit") or (SolvEnv == "Implicit") or (SolvEnv == "i") or (SolvEnv == "I"):
+        elif (SolvEnv == "IMPLICIT") or (SolvEnv == "Implicit") or (SolvEnv == "implicit") or (SolvEnv == "I") or (SolvEnv == "i"):
             break
         else:
-            print("  Sorry, I didn't understand your response.")
+            print(" Sorry, I didn't understand your response.")
 
     print("""
 
- # Save topology and coordinate files
- saveamberparm %s %s.prmtop %s.rst7""" %(OutPrefix, OutPrefix, OutPrefix), end=" ", file=open('tleap.in', 'a'))
+# Save topology and coordinate files
+saveamberparm %s %s.prmtop %s.rst7""" %(OutPrefix, OutPrefix, OutPrefix), end=" ", file=open('tleap.in', 'a'))
 
     print("""
 
- quit""", end=" ", file=open('tleap.in', 'a'))
+quit""", end=" ", file=open('tleap.in', 'a'))
 
     print("""
  The re-compiled structure will now be processed with TLEaP.
@@ -486,13 +704,249 @@ def ReBuildStructure(PDB):
  TLEaP finished! 
  Please inspect the structure to make sure it is correct.
     """)
+
+    if (SelCpH == "YES") or (SelCpH == "Yes") or (SelCpH == "yes") or (SelCpH == "Y") or (SelCpH == "y"):
+        print(""" Now Generating the cpin file because you indicated that you want to run molecular dynamics
+ with titratable residues.""")
+
+        RESNAMES = " "
+        if (len(SelASPIDs) != 0):
+            RESNAMES+=str(" AS4 ")
+        if (len(SelGLUIDs) != 0):
+            RESNAMES+=str(" GL4 ")
+        if (len(SelHISIDs) != 0):
+            RESNAMES+=str(" HIP ")
+        if (len(SelLYSIDs) != 0):
+            RESNAMES+=str(" LYS ")
+        if (len(SelTYRIDs) != 0):
+            RESNAMES+=str(" TYR ")
+        if (len(PRNA) != 0) and (len(PRND) != 0):
+            RESNAMES+=str(" PRN ")
+
+        subprocess.run(f"cpinutil.py -resnames {RESNAMES} -resnums {SelASPIDs} {SelGLUIDs} {SelHISIDs} {SelLYSIDs} {SelTYRIDs} {PRNA} {PRND} -p {OutPrefix}.prmtop -igb 2 -op {OutPrefix}_new.prmtop -o {OutPrefix}.cpin", shell=True)
+
     return OutPrefix, SolvEnv 
 
 ################################################################################################################################################
 
+def SetUpHemeB(PDB):
+    print("""
+ We will write and run a TCL script that identifies the residue
+ IDs of the heme groups and whcih His residues are coordinated
+ to each. These residues will be re-named according to the AMBER
+ parameterization for b-type hemes and a new PDB will be written.
+
+ The TCL script also creates a BondDefinitions.txt file that will 
+ be used to build the TLEaP input file. 
+ 
+ To create the TLEaP input, we'll ask about the type of solvent, 
+ unit cell shape, and numbers of cations/anions you wish to use.
+    """, end=" ")
+    
+    OutPrefix = input(" \n Prefix for output parm/rst7 ")
+
+    print("""
+ #-------------------------------------------------------------
+ #Input
+ mol load pdb {}.pdb
+ #-------------------------------------------------------------""".format(PDB), file=open('SetupStructure.tcl', 'w'))
+
+    if (len(DisulfList) != 0):
+        print(f"""
+ set DisulfCys [atomselect top "resname CYS and resid {DisulfList}"] 
+ $DisulfCys set resname CYX
+        """, file=open('SetupStructure.tcl', 'a'))
+
+    print("""
+ set out [open "BondDefinitions.txt" w]
+ 
+ set Fe [[atomselect top "name FE"] get resid]
+ set NumFe [llength $Fe]
+    
+ for {set i 0} {$i < $NumFe} {incr i} {
+   set SelFE [lindex $Fe $i]
+
+   set NumHIS {0}; set d {2.0}
+   while {$NumHIS != 2} {
+     set HIS [[atomselect top "resname HIS and name NE2 and same residue as within $d of resid $SelFE"] get resid]
+     set NumHIS [llength $HIS]
+     set d [expr {$d+0.1}]
+   }
+   puts "$SelFE | $d | $NumHIS | $HIS"
+
+   set SelFEid [atomselect top "resid $SelFE"]
+   $SelFEid set resname HEB
+
+   set HIM [lindex $HIS 0] 
+   set HIMid [atomselect top "resname HIS and resid $HIM"]
+   $HIMid set resname HIM
+
+   set HIN [lindex $HIS 1] 
+   set HINid [atomselect top "resname HIS and resid $HIN"]
+   $HINid set resname HIN
+
+   puts $out "bond %s.${HIM}.NE2 %s.${SelFE}.FE"
+   puts $out "bond %s.${HIN}.NE2 %s.${SelFE}.FE"
+ }""" %(OutPrefix, OutPrefix, OutPrefix, OutPrefix), file=open('SetupStructure.tcl', 'a'))
+
+    print("""
+ set all [atomselect top "all"]
+ $all writepdb {}-{}.pdb
+
+ exit
+    """.format(OutPrefix, PDB), file=open('SetupStructure.tcl', 'a'))
+
+    subprocess.run("vmd -e SetupStructure.tcl > SetupStructure.log", shell=True)
+   #subprocess.run("/Applications/VMD\ 1.9.4a51-x86_64-Rev9.app/Contents/vmd/vmd_MACOSXX86_64 -e SetupStructure.tcl > SetupStructure.log", shell=True)
+
+    print("""
+ VMD finished. Please check SetupStructure.log for any erros. You may 
+ also want to inspect the generated PDBs for the protein,each heme, 
+ and each heme propionic acid group.
+    """, end=" ")
+
+    Format = "sed -i '/OXT/a TER' "+OutPrefix+"-"+PDB+".pdb"
+    subprocess.run(Format, shell=True)
+
+    print("""
+ Now Setting up TLEaP input""")
+
+    print("""
+# Reference:
+# Yang, Longhua, Åge A. Skjevik, Wen-Ge Han Du, Louis Noodleman, Ross C. Walker, and Andreas W. Götz.
+# Data for molecular dynamics simulations of B-type cytochrome c oxidase with the Amber force field.
+# Data in brief 8 (2016): 1209-1214.
+#
+#
+#----- leaprc for loading the Cytochrome c Oxidase of ba3 type from Thermus thermophilus. -----
+#      Charges for the DNC derived using a cluster model for state 6 of the reaction cycle
+#      (ref. L.Noodleman et al. Inorg. Chem., 53 (2014) 6458;
+#            J.A.Fee et al. J.Am.Chem.Soc., 130 (2008) 15002.)
+#
+
+source leaprc.protein.ff14SB
+source leaprc.water.tip3p
+loadAmberParams frcmod.ionsjc_tip3p
+
+addAtomTypes {
+        {"FE" "Fe" "sp3"}
+        { "NO" "N" "sp2" }    ## Modified by George to define NO and NP atoms as sp2 hybridised.
+        { "NP" "N" "sp2" }    ## Prevents sp0 errors in leap.
+ }
+
+# Load heme b parameters:
+loadamberparams heme.frcmod
+loadoff hemeb.lib
+
+# Load pdb and bond iron to ligating histidine nitrogens:
+%s = loadpdb %s-%s.pdb""" %(OutPrefix, OutPrefix, PDB), file=open('tleap.in', 'w'))
+
+    print("""  
+# Connecting Cys residues for disulfides""", file=open('tleap.in', 'a'))
+
+    if (len(DisulfArray) != 0):
+        for idx in range(len(DisulfArray)):
+            print(f"bond {OutPrefix}.{DisulfArray[idx][0]}.SG {OutPrefix}.{DisulfArray[idx][1]}.SG", file=open('tleap.in', 'a'))
+
+    print("""  
+# Connecting HEH to the protein""", file=open('tleap.in', 'a'))
+    with open('BondDefinitions.txt','r') as firstfile, open('tleap.in','a') as secondfile:
+        for line in firstfile:
+            secondfile.write(line)
+
+    while True:
+        SolvEnv = input(""" 
+ Should the structure be prepared with 
+  an explicit or implicit solvent (explicit/implicit)? """)
+
+        if (SolvEnv == "EXPLICIT") or (SolvEnv == "Explicit") or (SolvEnv == "explicit") or (SolvEnv == "E") or (SolvEnv == "e"):
+            while True:
+                BoxShape = input(" Using a rectangular or an octahedral box (rec/oct)? ")
+
+                while True:
+                    try:
+                        BufferSize = int(input(" With how much of a solvent buffer (in angstroms)? "))
+                    except ValueError:
+                        print(" Your entry needs to be an integer. \n")
+                    else:
+                        break
+            
+                if (BoxShape == "RECTANGULAR") or (BoxShape == "Rectangular") or (BoxShape == "rectangular") or (BoxShape == "REC") or (BoxShape == "Rec") or (BoxShape == "rec") or (BoxShape == "R") or (BoxShape == "r"):
+                    print("""
+
+#Solvate
+solvateBox %s TIP3PBOX %0d""" %(OutPrefix, BufferSize), end=" ", file=open('tleap.in', 'a'))
+                    break
+                elif (BoxShape == "OCTAHEDRAL") or (BoxShape == "Octahedral") or (BoxShape == "octahedral") or (BoxShape == "OCT") or (BoxShape == "Oct") or (BoxShape == "oct") or (BoxShape == "O") or (BoxShape == "o"): 
+                    print("""
+
+#Solvate
+solvateOct %s TIP3PBOX %0d""" %(OutPrefix, BufferSize), end=" ", file=open('tleap.in', 'a'))
+                    break
+                else:
+                    print(" Sorry, I didn't understand your response.")
+
+            while True:
+                try:
+                    NaCount = int(input(" And how many Na+ ions; 0 = enough for charge neutrality? "))
+                except ValueError:
+                    print(" Your entry needs to be an integer. \n")
+                else:
+                    break
+
+            while True:
+                try:
+                    ClCount = int(input(" And how many Cl- ions; 0 = enough for charge neutrality? "))
+                except ValueError:
+                    print(" Your entry needs to be an integer. \n")
+                else:
+                    break
+
+            print("""
+
+#Add ions
+addions %s Na+ %0d""" %(OutPrefix, NaCount), end=" ", file=open('tleap.in', 'a'))
+            print("""
+addions %s Cl- %0d""" %(OutPrefix, ClCount), end=" ", file=open('tleap.in', 'a'))
+
+            break
+        elif (SolvEnv == "IMPLICIT") or (SolvEnv == "Implicit") or (SolvEnv == "implicit") or (SolvEnv == "I") or (SolvEnv == "i"):
+            break
+        else:
+            print(" Sorry, I didn't understand your response.")
+
+    print("""
+
+#Save topology and coordinate files
+saveamberparm %s %s.prmtop %s.rst7""" %(OutPrefix, OutPrefix, OutPrefix), end=" ", file=open('tleap.in', 'a'))
+
+    print("""
+
+quit""", end=" ", file=open('tleap.in', 'a'))
+
+    print("""
+ The prepared structure will now be processed with TLEaP.
+    """, end=" ")
+    subprocess.run("tleap -s -f tleap.in > tleap.log", shell=True)
+    print("""
+ TLEaP finished! 
+ Please inspect the structure to make sure it is correct.
+    """)
+    
+    return OutPrefix, SolvEnv 
+
+################################################################################################################################################
+
+################################################################################################################################################
+
 def StructRelax(Output, Solv):
-    if (os.path.isfile(Output+".prmtop") == True and os.path.isfile(Output+".rst7")):
-        print(" Found %s.prmtop and %s.rst7" %(Output, Output))
+
+    if (os.path.isfile(Output+"_new.prmtop") == True and os.path.isfile(Output+".rst7")) or (os.path.isfile(Output+".prmtop") == True and os.path.isfile(Output+".rst7")):
+        if (os.path.isfile(Output+"_new.prmtop")):
+            print(" Found %s_new.prmtop and %s.rst7" %(Output, Output))
+        else:
+            print(" Found %s.prmtop and %s.rst7" %(Output, Output))
+
         print(" Preparing to relax the geometry")
 
         if (Solv == "explicit") or (Solv == "Explicit") or (Solv == "e") or (Solv == "E"):
@@ -509,18 +963,36 @@ def StructRelax(Output, Solv):
   ntwx=100,          ! Trajectory file written every ntwx steps
   ntpr=100,          ! The mdout and mdinfo files written every ntpr steps
   ntr=1,             ! Turn on positional restraints
-  restraintmask='@CA,C,O,N&!:WAT|(:HEH,PRN)@FE,NA,NB,NC,ND,C3D,C2A,C3B,C2C,CA,CB',
+  restraintmask='@CA,C,O,N&!:WAT|@FE,NA,NB,NC,ND,C3D,C2A,C3B,C2C,CA,CB',
   restraint_wt=10.0, ! 10 kcal/mol.A**2 restraint force constant
  /
             """, file=open('min.in', 'w'))
 
-            print(" Running minimization ...")
-            subprocess.run("mpirun -np 64 pmemd.MPI -O -i min.in -o min.out -p "+Output+".prmtop -c "+Output+".rst7 -inf min.mdinfo -r min.rst7 -ref "+Output+".rst7", shell=True)
-            print(" Minimization finished!")
+
+            while True:
+                CompChoice = input("\n Run the minimization using SANDER (S) or PMEMD (P)? ")
+
+                if (CompChoice == "SANDER") or (CompChoice == "Sander") or (CompChoice == "sander") or (CompChoice == "S") or (CompChoice == "s"):
+                    if (os.path.isfile(Output+"_new.prmtop")):
+                        subprocess.run("sander -O -i min.in -o min.out -p "+Output+"_new.prmtop -c "+Output+".rst7 -inf min.mdinfo -r min.rst7 -ref "+Output+".rst7", shell=True)
+                    elif (os.path.isfile(Output+".prmtop")):
+                        subprocess.run("sander -O -i min.in -o min.out -p "+Output+".prmtop -c "+Output+".rst7 -inf min.mdinfo -r min.rst7 -ref "+Output+".rst7", shell=True)
+                    print(" Minimization finished!")
+                    break
+                elif (CompChoice == "PMEMD") or (CompChoice == "Pmemd") or (CompChoice == "pmemd") or (CompChoice == "P") or (CompChoice == "p"): 
+                    NProc = input(" parallelize the minimization over how many CPUs? ")
+                    if (os.path.isfile(Output+"_new.prmtop")):
+                        subprocess.run("mpirun -np "+NProc+" pmemd.MPI -O -i min.in -o min.out -p "+Output+"_new.prmtop -c "+Output+".rst7 -inf min.mdinfo -r min.rst7 -ref "+Output+".rst7", shell=True)
+                    elif (os.path.isfile(Output+".prmtop")):
+                        subprocess.run("mpirun -np "+NProc+" pmemd.MPI -O -i min.in -o min.out -p "+Output+".prmtop -c "+Output+".rst7 -inf min.mdinfo -r min.rst7 -ref "+Output+".rst7", shell=True)
+                    print(" Running minimization ...")
+                    break
+                else:
+                    print(" Sorry, I didn't understand your response. Please try again.")
         else:
             pass
 
-        if (Solv == "implicit") or (Solv == "Implicit") or (Solv == "i") or (Solv == "I"):
+        if (Solv == "IMPLICIT") or (Solv == "Implicit") or (Solv == "implicit") or (Solv == "I") or (Solv == "i"):
             print("""
 Energy Minimization in Implicit Solvent
 &cntrl
@@ -536,16 +1008,33 @@ Energy Minimization in Implicit Solvent
   ntwx=100,          ! Trajectory file written every ntwx steps
   ntpr=100,          ! The mdout and mdinfo files written every ntpr steps
   ntr=1,             ! Turn on positional restraints
-  restraintmask='@CA,C,O,N|(:HEH,PRN)@FE,NA,NB,NC,ND,C3D,C2A,C3B,C2C,CA,CB',
+  restraintmask='@CA,C,O,N&!:WAT|@FE,NA,NB,NC,ND,C3D,C2A,C3B,C2C,CA,CB',
   restraint_wt=10.0, ! 10 kcal/mol.A**2 restraint force constant
 /
             """, file=open('min.in', 'w'))
 
-            print(" Running minimization ...")
-            subprocess.run("sander -O -i min.in -o min.out -p "+Output+".prmtop -c "+Output+".rst7 -inf min.mdinfo -r min.rst7 -ref "+Output+".rst7", shell=True)
-            print(" Minimization finished!")
+            while True:
+                CompChoice = input("\n Run the minimization using SANDER (S) or PMEMD (P)? ")
+
+                if (CompChoice == "SANDER") (CompChoice == "Sander") or (CompChoice == "sander") or (CompChoice == "S") or (CompChoice == "s"):
+                    if (os.path.isfile(Output+"_new.prmtop")):
+                        subprocess.run("sander -O -i min.in -o min.out -p "+Output+"_new.prmtop -c "+Output+".rst7 -inf min.mdinfo -r min.rst7 -ref "+Output+".rst7", shell=True)
+                    elif (os.path.isfile(Output+".prmtop")):
+                        subprocess.run("sander -O -i min.in -o min.out -p "+Output+".prmtop -c "+Output+".rst7 -inf min.mdinfo -r min.rst7 -ref "+Output+".rst7", shell=True)
+                    print(" Minimization finished!")
+                    break
+                elif (CompChoice == "PMEMD") or (CompChoice == "Pmemd") or (CompChoice == "pmemd") or (CompChoice == "P") or (CompChoice == "p"): 
+                    NProc = input(" parallelize the minimization over how many CPUs? ")
+                    if (os.path.isfile(Output+"_new.prmtop")):
+                        subprocess.run("mpirun -np"+NProc+"pmemd.MPI -O -i min.in -o min.out -p "+Output+"_new.prmtop -c "+Output+".rst7 -inf min.mdinfo -r min.rst7 -ref "+Output+".rst7", shell=True)
+                    elif (os.path.isfile(Output+".prmtop")):
+                        subprocess.run("mpirun -np"+NProc+"pmemd.MPI -O -i min.in -o min.out -p "+Output+".prmtop -c "+Output+".rst7 -inf min.mdinfo -r min.rst7 -ref "+Output+".rst7", shell=True)
+                    print(" Running minimization ...")
+                    break
+                else:
+                    print(" Sorry, I didn't understand your response. Please try again.")
     else:
-        print(" %s.prmtop and %s.rst7 not found" %(Output, Output), end=" ")
+        print(" %s.prmtop or %s_new.prmtop and %s.rst7 not found" %(Output, Output, Output), end=" ")
         sys.exit(" Nothing to minimize. Something went wrong in the preceeding steps!")
 
 ################################################################################################################################################
@@ -578,16 +1067,17 @@ def ReorderResByChain(Output):
 parm %s.prmtop
 trajin min.rst7
 fixatomorder parmout %s_reord.prmtop
-trajout min.rst7
+trajout %s_reord.rst7 topresnum
 run
 quit
-    """ %(Output, Output), file=open("ReorderRes.in", "w"))
+    """ %(Output, Output, Output), file=open("ReorderRes.in", "w"))
 
     if (os.path.isfile("%s_reord.prmtop" %(Output)) == True):
         print("\n Found the reordered topology: %s_reord.prmtop!" %(Output))
     if (os.path.isfile("%s_reord.prmtop" %(Output)) == False):
         subprocess.run("cpptraj -i ReorderRes.in > ReorderRes.log 2> /dev/null", shell=True)
-        subprocess.run("ambpdb -p %s_reord.prmtop -c min.rst7 > min.pdb" %(Output), shell=True)
+    
+    subprocess.run("ambpdb -p "+Output+"_reord.prmtop -c "+Output+"_reord.rst7 > min.pdb", shell=True)
 
     Output = Output+"_reord"
 
@@ -601,40 +1091,20 @@ def LinearizeHemeSequence():
         print(" Found LinearizedHemeSequence.txt!")
 
     if (os.path.isfile("LinearizedHemeSequence.txt") == False):
-        New=list(map(int, input(" Linear Sequence: ").strip().split()))
-        x = len(New)
+        while True:
+            try:
+                New=list(map(int, input(" Linear Sequence: ").strip().split()))
+                x = len(New)
+            except ValueError:
+                print(" Your must enter integers.")
+            else:
+                break
         
         for idx in range(0, x):
             if (idx == 0):
                 print(idx, New[idx], file=open('LinearizedHemeSequence.txt', 'w'))
             else:
                 print(idx, New[idx], file=open('LinearizedHemeSequence.txt', 'a'))
-
-#       idx1 = 0; idx2 = 0;
-#       with open("ResIndexing.txt") as fp:
-#           x = len(New) #len(fp.readlines())
-#           Org = [0]*x
-#           Lin = [0]*x
-
-#           fp.seek(0)
-#           Lines = fp.readlines()
-#           for line in Lines:
-#               Org[idx1] = int(line.strip().split(" ")[5])
-#               idx1 +=1
-
-#           for idx1 in range(0, x):
-#               for idx2 in range(0, x):
-#                   if (Org[idx1] == New[idx2]):
-#                       Lin[idx2] = Org[idx1]
-
-#           for idx2 in range(0, x):
-#               if (idx2 == 0):
-#                   print(idx2, New[idx2], file=open('LinearizedHemeSequence.txt', 'w'))
-#               else:
-#                   print(idx2, New[idx2], file=open('LinearizedHemeSequence.txt', 'a'))
-
-#       print(" Original sequence of hemes: "+str(Org))
-#       print(" Linear sequence of hemes: "+str(New)+"\n")
 
 ################################################################################################################################################
 
@@ -647,7 +1117,7 @@ def LambdaFromSASA(Output):
  solvent accessible surface area, two steps will be take:
     (1) Convert min.rst7 to a PDB-formatted file using ambpdb""", end=" ")
 
-        if (PolySel == 'Yes') or (PolySel == "yes") or (PolySel == "Y") or (PolySel == "y"):
+        if (PolySel == 'YES') or (PolySel == 'Yes') or (PolySel == "yes") or (PolySel == "Y") or (PolySel == "y"):
             print("""
         Note: This step is skipped because you indicated you 
         have a polymeric structute, When the topology was
@@ -659,7 +1129,7 @@ def LambdaFromSASA(Output):
     (2) Write and submit a TCL script to VMD
         """)
 
-        if (PolySel == 'No') or (PolySel == "no") or (PolySel == "N") or (PolySel == "n"):
+        if (PolySel == 'NO') or (PolySel == "No") or (PolySel == "no") or (PolySel == "N") or (PolySel == "n"):
             subprocess.run("ambpdb -p "+Output+".prmtop -c min.rst7 > min.pdb", shell=True)
 
         idx = 0
@@ -721,6 +1191,7 @@ def LambdaFromSASA(Output):
             if (os.path.isfile("%0d,%0d_SASAanalysis.dat" %(HEH[idx], HEH[idx+1])) == False):
                 print(" Now using VMD to compute SASA Donor = %0d & Acceptor = %0d..." %(HEH[idx], HEH[idx+1]))
                 subprocess.run("vmd -e SASACalc.tcl > SASACalc.log", shell=True)
+                #subprocess.run("/Applications/VMD\ 1.9.4a51-x86_64-Rev9.app/Contents/vmd/vmd_MACOSXX86_64 -e SASACalc.tcl > SASACalc.log", shell=True)
 
         print(" Computing Reorganization Energy from Solvent Accessibility...")
         alpha = 5.18; beta = 0.016;
@@ -782,53 +1253,637 @@ def LambdaFromSASA(Output):
 
 ################################################################################################################################################
 
-def DeltaGFromPBSA(Output, Solv):
+################################################################################################################################################
 
-    print("""
- Single point PB calculation
- &cntrl
-  IPB=2, INP=2, ntx=1, imin=1,
- /
+def LambdaFromSASA_HemeB(Output):
 
- &pb
-  epsin=5.19, epsout=78.2, smoothopt=1, istrng=100, pbtemp=300, radiopt=0, dprob=1.4, iprob=2.0, sasopt=0, saopt=1,
-  npbopt=0, solvopt=1, accept=0.001, maxitn=100, fillratio=1.5, space=0.5, nfocus=2, fscale=8, npbgrid=1,
-  bcopt=5, eneopt=2, frcopt=2, scalec=0, cutfd=5, cutnb=0,
-  !isurfchg=1, npbverb=1,
-  !#phiout=1, phiform=2, outlvlset=true,
- /
-    """, file=open('pbsa.key', 'w'))
-
-    if (Solv == "explicit") or (Solv == "Explicit") or (Solv == "e") or (Solv == "E"):
+    if (os.path.isfile(Output+".prmtop") == True and os.path.isfile("min.rst7")):
+        print(" Found %s.prmtop and min.rst7" %(Output))
         print("""
- parm    %s.prmtop
+ To estimate the reorganization energy (lambda) from the 
+ solvent accessible surface area, two steps will be take:
+    (1) Convert min.rst7 to a PDB-formatted file using ambpdb""", end=" ")
+
+        if (PolySel == 'YES') or (PolySel == 'Yes') or (PolySel == "yes") or (PolySel == "Y") or (PolySel == "y"):
+            print("""
+        Note: This step is skipped because you indicated you 
+        have a polymeric structute, When the topology was
+        re-ordered to conform to AMBER conventions for 
+        multi-chain structures, min.pdb was already 
+        created.
+            """, end=" ")
+        print("""
+    (2) Write and submit a TCL script to VMD
+        """)
+
+        if (PolySel == 'NO') or (PolySel == "No") or (PolySel == "no") or (PolySel == "N") or (PolySel == "n"):
+            subprocess.run("ambpdb -p "+Output+".prmtop -c min.rst7 > min.pdb", shell=True)
+
+        HisID = []; HebID = []; HEM = []
+        if (os.path.isfile("BondDefinitions.txt") == True):
+            with open("BondDefinitions.txt") as f:
+                for line in f:
+                    HisID.append(int(line.strip().split('.')[1]))
+                    HebID.append(int(line.strip().split('.')[3]))
+        elif (os.path.isfile("BondDefinitions.txt") == False):
+            sys.exit("""
+ The file BondDefinitions.txt generated in the first 
+ module of BioDC is missing. Residue ID information
+ from this file is needed in the module #2. 
+
+ Please re-run module #1 to generate BondDefinitions.txt.
+ Then, you can return to this module. 
+ """)
+ 
+        for i in range(0, len(HisID), 2):
+            HEM.append([HebID[i], HisID[i], HisID[i+1]])
+
+        for idx in range(len(HEM)-1):
+           #print(HEM[idx][0], HEM[idx][1], HEM[idx][2], HEM[idx+1][0], HEM[idx+1][1], HEM[idx+1][2])
+
+            print("""
+ mol new min.pdb
+
+ set HEB1 %0d; set HIM1 %0d; set HIN1 %0d
+ set HEB2 %0d; set HIM2 %0d; set HIN2 %0d""" %(HEM[idx][0], HEM[idx][1], HEM[idx][2], HEM[idx+1][0], HEM[idx+1][1], HEM[idx+1][2]), file=open('SASACalc.tcl', 'w'))  
+
+            print("""
+ set output [open "${HEB1},${HEB2}_SASAanalysis.dat" a]
+
+ set allsel     [atomselect top "all and not water and not ions"]
+
+ set donor      [atomselect top "(resname HEB and resid $HEB1) or (resname HIM and resid $HIM1) or (resname HIN and resid $HIN1)"]
+ set Dfe        [atomselect top "(resname HEB and resid $HEB1 and name FE)"]
+ set DfeIDX     [$Dfe get index]
+ set DfeID      [$Dfe get resid]
+
+ set acceptor   [atomselect top "(resname HEB and resid $HEB2) or (resname HIM and resid $HIM2) or (resname HIN and resid $HIN2)"]
+ set Afe        [atomselect top "(resname HEB and resid $HEB2 and name FE)"]
+ set AfeIDX     [$Afe get index]
+ set AfeID      [$Afe get resid]
+ set DA         [list $DfeIDX $AfeIDX]
+
+ set nf [molinfo top get numframes]
+ puts "There are $nf frames"
+
+ for {set frame 0} {$frame < $nf} {incr frame} {
+   set time [expr ($frame * 1 * 0.0020)]
+
+   puts "  Analyzing Frame $frame..."
+
+   $allsel   frame $frame; $allsel    update
+   $donor    frame $frame; $donor     update
+   $acceptor frame $frame; $acceptor  update
+
+   set dsasa [measure sasa 1.4 $allsel -restrict $donor]
+   set asasa [measure sasa 1.4 $allsel -restrict $acceptor]
+   set Rfefe [measure bond $DA frame $frame]
+
+   puts $output "$time $dsasa $asasa $Rfefe"
+ }
+ exit
+            """, file=open('SASACalc.tcl', 'a'))
+            
+            if (os.path.isfile("%0d,%0d_SASAanalysis.dat" %(HEM[idx][0], HEM[idx+1][0])) == True):
+                print(""" Found %0d,%0d_SASAanalysis.dat from a prior execution.
+ This prior output will be used for the analysis.
+  """ %(HEM[idx][0], HEM[idx+1][0])) 
+
+            if (os.path.isfile("%0d,%0d_SASAanalysis.dat" %(HEM[idx][0], HEM[idx+1][0])) == False):
+                print(" Now using VMD to compute SASA Donor = %0d & Acceptor = %0d..." %(HEM[idx][0], HEM[idx+1][0]))
+                subprocess.run("vmd -e SASACalc.tcl > SASACalc.log", shell=True)
+                #subprocess.run("/Applications/VMD\ 1.9.4a51-x86_64-Rev9.app/Contents/vmd/vmd_MACOSXX86_64 -e SASACalc.tcl > SASACalc.log", shell=True)
+
+        print(" Computing Reorganization Energy from Solvent Accessibility...")
+        alpha = 5.18; beta = 0.016;
+        Rd=4.6; Ra=4.6;
+        Eopt=1.84 
+
+        Dsasa = [0]*(len(HEM)-1)
+        Asasa = [0]*(len(HEM)-1)
+        TotalSASA = [0]*(len(HEM)-1)
+        Es = [0]*(len(HEM)-1)
+        M = [0]*(len(HEM)-1)
+        Rda = [0]*(len(HEM)-1)
+        R = [0]*(len(HEM)-1)
+        Lambda = [0]*(len(HEM)-1)
+        for idx in range(len(HEM)-1):
+            with open(str(HEM[idx][0])+","+str(HEM[idx+1][0])+"_SASAanalysis.dat") as fp:
+                #print(str(HEM[idx][0])+","+str(HEM[idx+1][0])+"_SASAanalysis.dat")
+                Lines = fp.readlines()
+                for line in Lines:
+                    #print(line)
+                    Dsasa[idx] = float(line.strip().split(" ")[1])
+                    Asasa[idx] = float(line.strip().split(" ")[2])
+                    Rda[idx] = float(line.strip().split(" ")[3])
+                    #print(Dsasa, Asasa, Rda)
+
+            TotalSASA[idx] = Dsasa[idx] + Asasa[idx]
+            Es[idx] = alpha + (beta * TotalSASA[idx])
+            M[idx] = (1/Eopt) - (1/Es[idx])
+            R[idx] = (1/((2*Rd)/0.53)) + (1/((2*Ra)/0.53)) - (1/(Rda[idx]/0.53))
+            Lambda[idx] = ((-1)**2) * (M[idx]) * (R[idx]) * (27.2114)
+            #print(TotalSASA[idx], Es[idx], M[idx], R[idx], Lambda[idx])
+
+        for idx in range(len(HEM)-1):
+            if (idx == 0):
+                print(""" 
+ HEM-%0d -> HEM-%0d --------- 
+ Dsasa     = %.3f
+ Asasa     = %.3f
+ Rda       = %.3f
+ TotalSASA = %.3f
+ Es        = %.3f
+ ----------------------------
+ Reorg. Eng. = %.3f""" %(HEM[idx][0], HEM[idx+1][0], Dsasa[idx], Asasa[idx], Rda[idx], TotalSASA[idx], Es[idx], Lambda[idx]), file=open('Lambda.txt', 'w'))
+
+            if (idx != 0):
+                print(""" 
+ HEM-%0d -> HEM-%0d --------- 
+ Dsasa     = %.3f
+ Asasa     = %.3f
+ Rda       = %.3f
+ TotalSASA = %.3f
+ Es        = %.3f
+ ----------------------------
+ Reorg. Eng. = %.3f""" %(HEM[idx][0], HEM[idx+1][0], Dsasa[idx], Asasa[idx], Rda[idx], TotalSASA[idx], Es[idx], Lambda[idx]), file=open('Lambda.txt', 'a'))
+
+        print(" Done!")
+
+    return Lambda
+
+################################################################################################################################################
+
+################################################################################################################################################
+
+def DefineRefState(Output, HemeType):
+
+    if (HemeType == "c") or (HemeType == "C"):
+        try:
+            print(f" parm    {Output}.prmtop", file=open("SetRefState.in", 'w'))
+
+            idx = 0
+            with open("LinearizedHemeSequence.txt") as fp:
+                x = len(fp.readlines())
+                HEH = [0]*x
+
+                fp.seek(0)
+                Lines = fp.readlines()
+                for line in Lines:
+                    HEH[idx] = int(line.strip().split(" ")[1])
+                    idx+=1
+
+            for HEH_ID in HEH:
+                print(f" ChangeRedoxState :{HEH_ID} 1", file=open("SetRefState.in", 'a'))
+
+            print(f"\n SetOverwrite True", file=open("SetRefState.in", 'a'))
+            print(f" outparm RefState.prmtop", file=open("SetRefState.in", 'a'))
+            print(f" quit", file=open("SetRefState.in", 'a'))
+
+            subprocess.run("parmed -i SetRefState.in > SetRefState.log", shell=True)
+        except:
+            print("""
+ Something went wrong generating RefState.prmtop. 
+ Please check SetRefState.log""")
+
+    if (HemeType == "b") or (HemeType == "B"):
+        try:
+            print(f" parm    {Output}.prmtop", file=open("SetRefState.in", 'w'))
+
+            HisID = []; HebID = []; HEM = []
+            with open("BondDefinitions.txt") as f:
+                for line in f:
+                    HisID.append(int(line.strip().split('.')[1]))
+                    HebID.append(int(line.strip().split('.')[3]))
+
+            for i in range(0, len(HisID), 2):
+                HEM.append([HebID[i], HisID[i], HisID[i+1]])
+
+            for i in range(0, len(HEM)):
+                print(f"""
+ netcharge :{HEM[i][0]},{HEM[i][1]},{HEM[i][2]}
+ change CHARGE :{HEM[i][0]}&@FE         0.4223
+ change CHARGE :{HEM[i][0]}&@NA         0.1973
+ change CHARGE :{HEM[i][0]}&@C1A       -0.3489
+ change CHARGE :{HEM[i][0]}&@C2A        0.2187
+ change CHARGE :{HEM[i][0]}&@C3A       -0.0877
+ change CHARGE :{HEM[i][0]}&@CMA       -0.0598
+ change CHARGE :{HEM[i][0]}&@HMA1       0.0703
+ change CHARGE :{HEM[i][0]}&@HMA2       0.0281
+ change CHARGE :{HEM[i][0]}&@HMA3       0.0872
+ change CHARGE :{HEM[i][0]}&@C4A       -0.2107
+ change CHARGE :{HEM[i][0]}&@CHB       -0.1614
+ change CHARGE :{HEM[i][0]}&@HHB        0.3441
+ change CHARGE :{HEM[i][0]}&@C1B       -0.1858
+ change CHARGE :{HEM[i][0]}&@NB         0.1413
+ change CHARGE :{HEM[i][0]}&@C2B       -0.0884
+ change CHARGE :{HEM[i][0]}&@CMB        0.0466
+ change CHARGE :{HEM[i][0]}&@HMB1      -0.0146
+ change CHARGE :{HEM[i][0]}&@HMB2       0.0447
+ change CHARGE :{HEM[i][0]}&@HMB3       0.0352
+ change CHARGE :{HEM[i][0]}&@C3B        0.0348
+ change CHARGE :{HEM[i][0]}&@CAB       -0.2072
+ change CHARGE :{HEM[i][0]}&@HAB        0.1898
+ change CHARGE :{HEM[i][0]}&@CBB       -0.4301
+ change CHARGE :{HEM[i][0]}&@HBB1       0.2165
+ change CHARGE :{HEM[i][0]}&@HBB2       0.1971
+ change CHARGE :{HEM[i][0]}&@C4B       -0.0142
+ change CHARGE :{HEM[i][0]}&@CHC       -0.2576
+ change CHARGE :{HEM[i][0]}&@HHC        0.2520
+ change CHARGE :{HEM[i][0]}&@C1C        0.0528
+ change CHARGE :{HEM[i][0]}&@NC         0.1307
+ change CHARGE :{HEM[i][0]}&@C2C        0.0116
+ change CHARGE :{HEM[i][0]}&@CMC       -0.1501
+ change CHARGE :{HEM[i][0]}&@HMC1       0.0991
+ change CHARGE :{HEM[i][0]}&@HMC2       0.1038
+ change CHARGE :{HEM[i][0]}&@HMC3       0.0489
+ change CHARGE :{HEM[i][0]}&@C3C        0.0046
+ change CHARGE :{HEM[i][0]}&@CAC       -0.0156
+ change CHARGE :{HEM[i][0]}&@HAC        0.1293
+ change CHARGE :{HEM[i][0]}&@CBC       -0.5384
+ change CHARGE :{HEM[i][0]}&@HBC1       0.2611
+ change CHARGE :{HEM[i][0]}&@HBC2       0.2581
+ change CHARGE :{HEM[i][0]}&@C4C       -0.2427
+ change CHARGE :{HEM[i][0]}&@CHD       -0.2138
+ change CHARGE :{HEM[i][0]}&@HHD        0.3122
+ change CHARGE :{HEM[i][0]}&@C1D       -0.0975
+ change CHARGE :{HEM[i][0]}&@ND         0.1255
+ change CHARGE :{HEM[i][0]}&@C2D       -0.0861
+ change CHARGE :{HEM[i][0]}&@CMD        0.0005
+ change CHARGE :{HEM[i][0]}&@HMD1       0.0098
+ change CHARGE :{HEM[i][0]}&@HMD2       0.0805
+ change CHARGE :{HEM[i][0]}&@HMD3       0.0078
+ change CHARGE :{HEM[i][0]}&@C3D       -0.1965
+ change CHARGE :{HEM[i][0]}&@C4D        0.0236
+ change CHARGE :{HEM[i][0]}&@CHA       -0.1216
+ change CHARGE :{HEM[i][0]}&@HHA        0.3063
+ change CHARGE :{HEM[i][1]}&@CB         0.0426
+ change CHARGE :{HEM[i][1]}&@HB2        0.0349
+ change CHARGE :{HEM[i][1]}&@HB3        0.0349
+ change CHARGE :{HEM[i][1]}&@CG         0.0408
+ change CHARGE :{HEM[i][1]}&@ND1       -0.1881
+ change CHARGE :{HEM[i][1]}&@HD1        0.3920
+ change CHARGE :{HEM[i][1]}&@CE1       -0.1901
+ change CHARGE :{HEM[i][1]}&@HE1        0.2191
+ change CHARGE :{HEM[i][1]}&@NE2       -0.0847
+ change CHARGE :{HEM[i][1]}&@CD2       -0.3012
+ change CHARGE :{HEM[i][1]}&@HD2        0.2011
+ change CHARGE :{HEM[i][2]}&@CB        -0.0373
+ change CHARGE :{HEM[i][2]}&@HB2        0.0585
+ change CHARGE :{HEM[i][2]}&@HB3        0.0585
+ change CHARGE :{HEM[i][2]}&@CG        -0.0477
+ change CHARGE :{HEM[i][2]}&@ND1       -0.0525
+ change CHARGE :{HEM[i][2]}&@HD1        0.3710
+ change CHARGE :{HEM[i][2]}&@CE1       -0.3032
+ change CHARGE :{HEM[i][2]}&@HE1        0.2740
+ change CHARGE :{HEM[i][2]}&@NE2       -0.1611
+ change CHARGE :{HEM[i][2]}&@CD2       -0.2274
+ change CHARGE :{HEM[i][2]}&@HD2        0.2297
+ change CHARGE :{HEM[i][0]}&@CAA        0.1105
+ change CHARGE :{HEM[i][0]}&@HAA1       0.0269
+ change CHARGE :{HEM[i][0]}&@HAA2      -0.0203
+ change CHARGE :{HEM[i][0]}&@CBA       -0.0733
+ change CHARGE :{HEM[i][0]}&@HBA1       0.0006
+ change CHARGE :{HEM[i][0]}&@HBA2       0.0585
+ change CHARGE :{HEM[i][0]}&@CGA        0.5918
+ change CHARGE :{HEM[i][0]}&@O1A       -0.6537
+ change CHARGE :{HEM[i][0]}&@O2A       -0.6853
+ change CHARGE :{HEM[i][0]}&@CAD       -0.0291
+ change CHARGE :{HEM[i][0]}&@HAD1       0.0078
+ change CHARGE :{HEM[i][0]}&@HAD2       0.0658
+ change CHARGE :{HEM[i][0]}&@CBD        0.2827
+ change CHARGE :{HEM[i][0]}&@HBD1      -0.0293
+ change CHARGE :{HEM[i][0]}&@HBD2      -0.0436
+ change CHARGE :{HEM[i][0]}&@CGD        0.4783
+ change CHARGE :{HEM[i][0]}&@O1D       -0.6025
+ change CHARGE :{HEM[i][0]}&@O2D       -0.6098
+ netcharge :{HEM[i][0]},{HEM[i][1]},{HEM[i][2]}""",  file=open("SetRefState.in", 'a'))
+
+                i+=1
+
+            print(f"\n SetOverwrite True", file=open("SetRefState.in", 'a'))
+            print(f" outparm RefState.prmtop", file=open("SetRefState.in", 'a'))
+            print(f" quit", file=open("SetRefState.in", 'a'))
+
+            subprocess.run("parmed -i SetRefState.in > SetRefState.log", shell=True)
+        except:
+            print("""
+ Something went wrong generating RefState.prmtop. 
+ Please check SetRefState.log""")
+
+################################################################################################################################################
+
+################################################################################################################################################
+
+def DeltaGFromPBSA(Output, Solv, PolySel, HemeType):
+
+    if (os.path.isfile(f"RefState.prmtop") == False):
+        print("""
+ Generating the reference state topology where all hemes
+ are in the reduced state.
+ """)
+        DefineRefState(Output, HemeType)
+    elif (os.path.isfile(f"RefState.prmtop") == True):
+        print("""
+ Found RefState.prmtop
+ """)
+
+    if (Solv == "EXPLICIT") or (Solv == "Explicit") or (Solv == "explicit") or (Solv == "E") or (Solv == "e"):
+        print("""
+ parm    RefState.prmtop
  trajin  min.rst7
  strip   :WAT,Na+,Cl- outprefix StrucForPBSA
  trajout StrucForPBSA.rst7
  run
-        """ %(Output), file=open("GenerateCoordForPBSA.in", 'w'))
+        """, file=open("GenerateCoordForPBSA.in", 'w'))
         subprocess.run("cpptraj -i GenerateCoordForPBSA.in > GenerateCoordForPBSA.log", shell=True)
     else:
         print("""
- parm    %s.prmtop
+ parm    RefState.prmtop
  trajin  min.rst7
- parmwrite out StrucForPBSA.%s.prmtop
+ parmwrite out StrucForPBSA.RefState.prmtop
  trajout StrucForPBSA.rst7
  run
-        """ %(Output, Output), file=open("GenerateCoordForPBSA.in", 'w'))
+        """, file=open("GenerateCoordForPBSA.in", 'w'))
         subprocess.run("cpptraj -i GenerateCoordForPBSA.in > GenerateCoordForPBSA.log", shell=True)
 
-    idx = 0; idxc = 0;
+    while True:
+        CompChoice = input(" Do you wish to run any needed computaitons in serial or parallel (s/p)? ")
+
+        if (CompChoice == "SERIAL") or (CompChoice == "Serial") or (CompChoice == "serial") or (CompChoice == "S") or (CompChoice == "s") or (CompChoice == "PARALLEL") or (CompChoice == "Parallel") or (CompChoice == "parallel") or (CompChoice == "P") or (CompChoice == "p"):
+            break
+        else:
+            print(" Sorry, I didn't understand your choice. Please try again.")
+
+    Es = []
+    if (os.path.isfile(f"Lambda.txt") == True):
+        with open('Lambda.txt', 'r') as fp:
+            lines = fp.readlines()
+            for line in lines:
+                word1 = 'Es        ='
+
+                if (line.find(word1) != -1):
+                    Es.append(float(line.strip().split()[2]))
+
+    elif (os.path.isfile(f"Lambda.txt") == False):
+        print(""" 
+ Interior static dielectric constants cannot be assigned
+ from Lambda.txt for the PBSA calculations because the file
+ was not found. You will be asked to specify this parameter.
+ """)
+
+    idx = 0; idxc = 0; 
     with open("LinearizedHemeSequence.txt") as fp:
         x = len(fp.readlines())
         HEH = [0]*x
-        command = [' ']*(2*x)
+        epsin = [0]*x
+        epsout = [0]*x
         RedoxState = [0]*2
+        command = [' ']*(2*x)
 
         fp.seek(0)
         Lines = fp.readlines()
         for line in Lines:
             HEH[idx] = int(line.strip().split(" ")[1])
+
+            if (len(Es) != 0) and (idx == 0):
+                epsin[idx] = round(Es[idx], 3) 
+                while True:
+                    SelEpsin = input(f""" 
+ The internal static dielectric constant for HEH-{HEH[idx]} is {epsin[idx]}.
+ Should this value be used? """)
+                    if (SelEpsin == "YES") or (SelEpsin == "Yes") or (SelEpsin == "yes") or (SelEpsin == "Y") or (SelEpsin == "y"):
+                        pass
+                        break
+                    elif (SelEpsin == "NO") or (SelEpsin == "No") or (SelEpsin == "no") or (SelEpsin == "N") or (SelEpsin == "n"):
+                        while True:
+                            try:
+                                epsin[idx] = round(float(input(f" What should the internal dielectric constant be for the PBSA calculation on HEH-{HEH[idx]}? ")), 3)
+                            except ValueError:
+                                print(" Your entry needs to be a floating-poiint number.")
+                            else:
+                                break
+                        break
+                    else:
+                        print(" Sorry, I didn't understand your response \n")
+
+            elif (len(Es) != 0) and (idx != 0) and (idx != len(HEH)-1):
+                epsin[idx] = round(((Es[idx-1] + Es[idx])/2), 3)
+                while True:
+                    SelEpsin = input(f""" 
+ The internal static dielectric constant for HEH-{HEH[idx]} is {epsin[idx]}.
+ Should this value be used? """)
+                    if (SelEpsin == "YES") or (SelEpsin == "Yes") or (SelEpsin == "yes") or (SelEpsin == "Y") or (SelEpsin == "y"):
+                        pass
+                        break
+                    elif (SelEpsin == "NO") or (SelEpsin == "No") or (SelEpsin == "no") or (SelEpsin == "N") or (SelEpsin == "n"):
+                        while True:
+                            try:
+                                epsin[idx] = round(float(input(f" What should the internal dielectric constant be for the PBSA calculation on HEH-{HEH[idx]}? ")), 3)
+                            except ValueError:
+                                print(" Your entry needs to be a floating-poiint number.")
+                            else:
+                                break
+                        break
+                    else:
+                        print(" Sorry, I didn't understand your response \n")
+
+            elif (len(Es) != 0) and (idx == len(HEH)-1):
+                if (PolySel == 'NO') or (PolySel == "No") or (PolySel == "no") or (PolySel == "N") or (PolySel == "n"):
+                    epsin[idx] = round(Es[len(Es)-1], 3)
+                if (PolySel == 'YES') or (PolySel == 'Yes') or (PolySel == "yes") or (PolySel == "Y") or (PolySel == "y"):
+                    epsin[idx] = round(((Es[len(Es)-1] + Es[0])/2), 3)
+                while True:
+                    SelEpsin = input(f""" 
+ The internal static dielectric constant for HEH-{HEH[idx]} is {epsin[idx]}.
+ If you inidcated the structure is polymeric, this vlaue is the average
+ of the dielectric constants for the last pair and first pair of hemes
+ from the unit cell.
+
+ Should this value be used? """)
+                    if (SelEpsin == "YES") or (SelEpsin == "Yes") or (SelEpsin == "yes") or (SelEpsin == "Y") or (SelEpsin == "y"):
+                        pass
+                        break
+                    elif (SelEpsin == "NO") or (SelEpsin == "No") or (SelEpsin == "no") or (SelEpsin == "N") or (SelEpsin == "n"):
+                        while True:
+                            try:
+                                epsin[idx] = round(float(input(f" What should the internal dielectric constant be for the PBSA calculation on HEH-{HEH[idx]}? ")), 3)
+                            except ValueError:
+                                print(" Your entry needs to be a floating-poiint number.")
+                            else:
+                                break
+                        break
+                    else:
+                        print(" Sorry, I didn't understand your response \n")
+
+            elif (len(Es) == 0):
+                while True:
+                    try:
+                        epsin[idx] = round(float(input(f" What should the internal dielectric constant be for the PBSA calculation on HEH-{HEH[idx]}? ")), 3)
+                    except ValueError:
+                        print(" Your entry needs to be a floating-poiint number.")
+                    else:
+                        break
+
+            while True:
+                try:
+                    epsout[idx] = round(float(input(f" What should the external dielectric constant be for HEH-{HEH[idx]}? ")), 3)
+                except ValueError:
+                    print(" Your entry needs to be a floating-poiint number.")
+                else:
+                    break
+
+            while True:
+                try:
+                    istrng = float(input(f" What ionic strength should be used in mM? "))
+                except ValueError:
+                    print(" Your entry needs to be a floating-poiint number.")
+                else:
+                    break
+   
+            while True:
+                memb = input(f" Should there be an implicit slab membrane? ")
+
+                if (memb == "YES") or (memb == "Yes") or (memb == "yes") or (memb == "Y") or (memb == "y"):
+                    membraneopt = 1
+
+                    while True:
+                        try:
+                            epsmem = float(input(f" What should be the value of the membrane dielectric constant? "))
+                        except ValueError:
+                            print(" Your entry needs to be a floating-poiint number.")
+                        else:
+                            break
+
+                    IPB = 1
+                    INP = 0
+                    ivalence = 0
+                    bcopt = 10
+                    eneopt = 1
+                    sasopt = 0
+                    solvopt = 1
+                    smoothopt = 1
+                    maxitn = 200
+                    nfocus = 1
+
+                    while True:
+                        SelPoretype = input(f" Does the protein have a solvent-filled channel region that should be automatically detected? ")
+                        if (SelPoretype == "YES") or (SelPoretype == "Yes") or (SelPoretype == "yes") or (SelPoretype == "Y") or (SelPoretype == "y"):
+                            poretype = 1
+                            break
+                        elif (SelPoretype == "NO") or (SelPoretype == "No") or (SelPoretype == "n") or (SelPoretype == "N") or (SelPoretype == "n"):
+                            poretype = 0
+                            break
+                        else:
+                            print(" Sorry, I didn't understand your respond.")
+                    break
+                elif (memb == "NO") or (memb == "No") or (memb == "no") or (memb == "N") or (memb == "n"):
+                    while True:
+                        SelDelphi = input(f" Should a solution-phease Delphi-like calculation be performed? ")
+
+                        if (SelDelphi == "YES") or (SelDelphi == "Yes") or (SelDelphi == "yes") or (SelDelphi == "Y") or (SelDelphi == "y"):
+                            membraneopt = 0
+                            poretype = 0
+                            epsmem = epsout[idx]
+                            IPB = 1
+                            INP = 0
+                            ivalence = 1
+                            bcopt = 5
+                            eneopt = 2
+                            sasopt = 0
+                            solvopt = 1
+                            smoothopt = 2
+                            maxitn = 100
+                            nfocus = 1
+
+                            break
+
+                        elif (SelDelphi == "NO") or (SelDelphi == "No") or (SelDelphi == "n") or (SelDelphi == "N") or (SelDelphi == "n"):
+                            membraneopt = 0
+                            poretype = 0
+                            epsmem = epsout[idx]
+                            IPB = 2
+                            INP = 2
+                            ivalence = 0
+                            bcopt = 5
+                            eneopt = 2
+                            sasopt = 0
+                            solvopt = 1
+                            smoothopt = 1
+                            maxitn = 100
+                            nfocus = 2
+
+                            break
+
+                        else:
+                            print(" Sorry, I didn't understand your response.")
+                    break
+                else:
+                    print(" Sorry, I didn't understand your response.")
+
+            if (os.path.isfile(f"pbsa-{HEH[idx]}_epsin{epsin[idx]}_epsout{epsout[idx]}.key") == True):
+                print(f""" 
+ Found pbsa-{HEH[idx]}_epsin{epsin[idx]}_epsout{epsout[idx]}.key to be used in PBSA calculation for HEH-{HEH[idx]}""")
+            elif (os.path.isfile(f"pbsa-{HEH[idx]}_epsin{epsin[idx]}_epsout{epsout[idx]}.key") == False):
+                print(f"""
+ Single point PB calculation
+ &cntrl
+  IPB={IPB},             ! Dielectric interface model with the level-set funciton
+  INP={INP},             ! Non-polar solvation free energy method   
+  ntx=1,             ! Read formatted coordinates from inpcrd 
+  imin=1,            ! Single-point energy evalulation 
+ /
+
+ &pb
+  pbtemp=300,        ! Temperature for salt effects in PB equation 
+  ivalence={ivalence},        ! 
+  istrng={istrng},      ! Ionic strength in mM for PB equation 
+  epsin={epsin[idx]},       ! Solute region dielectric constant 
+  epsout={epsout[idx]},       ! Solvent region dielectric constant 
+  epsmem={epsmem},       ! Membrane dielectric constant
+  membraneopt={membraneopt},     ! Turn off/on implicit slab membrane
+  mthick=40.0        ! Membrane thickness in Å
+  mctrdz=0,          ! Membrane center in Z direction Å; 0 = centered at center of protein 
+  poretype={poretype},        ! Turn off(0)/on(1) pore-searching algorithm
+  radiopt=0,         ! Atomic radii from topology used; optimized radius (choice 1) for FE is missing 
+  dprob=1.4,         ! Solvent probe radius for molecular surface definition  
+  iprob=2.0,         ! Mobile ion probe radius used to define the Stern layer. 
+  mprob=2.7,         ! Membrane lipid probe radius 
+  sasopt=0,          ! Use solvent-excluded surface type for solute 
+  triopt=1,          ! Use trimer arc dots to map analytical solvent excluded surface  
+  arcres=0.25,       ! Resolution of dots (in Å) used to represent solvent-accessible arcs 
+  smoothopt={smoothopt},       ! Use weighted harmonic average of epsin and epsout for boundary grid edges across solute/solvent dielectric boundary 
+  saopt=1,           ! Compute solute surface area 
+  decompopt=2,       ! sigma decomposiiton scheme for non-polar solvation 
+  use_rmin=1,        ! Use rmin for van der waals radi, improves agreement with TIP3P
+  sprob=0.557,       ! Compute dispersion term using solvent probe radius (in Å) for solvent accessible surface area 
+  vprob=1.300,       ! Compute non-polar cavity solvation free energy using olvent probe radius (in Å) for molecular volume 
+  rhow_effect=1.129, ! Effective water density for non-polar dispersion term
+  use_sav=1,         ! Use molecular volume for cavity term
+  maxsph=400,        ! Approximate number of dots to represent the maximum atomic solvent accessible surface
+  npbopt=0,          ! Linear PB equation is solved  
+  solvopt=1,         ! ICCG/PICCG iterative solver 
+  accept=0.001,      ! Iteration convergence criterion   
+  maxitn={maxitn},        ! Maximum number of iterations for finite difference solver 
+  fillratio=1.5,     ! ratio between longest dimension of rectangular finite-difference grid and that of the solute    
+  space=0.5,         ! Grid spacing for finite-difference solver 
+  nfocus={nfocus},          ! Number of successive FD calculations for electrostatic focusing  
+  fscale=8,          ! Ratio between coarse and fine grid spacings in electrostatic focussing 
+  npbgrid=1,         ! Frequency for regenerating finite-difference grid 
+  bcopt={bcopt},           ! Boundary grid potentials computed using all grid charges
+  eneopt={eneopt},          ! Reaction field energy computed using dielectric boundary surface charges 
+  frcopt=2,          ! reaction field forces and dielectric boundary forces computed with dielectric boundary surface polarized charges 
+  scalec=0,          ! Dielectric boundary surface charges are not scaled before computing reaction field energy and forces
+  cutfd=5,           ! Atom-based cutoff distance to remove short-range finite-difference interactions and to add pairwise charge-based interactions
+  cutnb=0,           ! Atom-based cutoff distance for van der Waals interactions and pairwise Coulombic interactions when eneopt=2   
+  !phiout=1,         ! Output spatial distribution of electrostatic potential f
+  !phiform=2,        ! DX format of the electrostatic potential file for VMD
+  !outlvlset=true,   ! Output total level set, used in locating interfaces between regions of differing dielectric constant
+  !outmlvlset=true,  ! Output membrane level set, used in locating interfaces between regions of differing dielectric constant
+  !npbverb=1,        ! Output verbosity; 1 is verbose 
+  !isurfchg=1,       ! Save surface changes to a file
+ /
+                """, file=open(f"pbsa-{HEH[idx]}_epsin{epsin[idx]}_epsout{epsout[idx]}.key", 'w'))
 
             for state in ["ox", "red"]:
 
@@ -841,32 +1896,34 @@ def DeltaGFromPBSA(Output, Solv):
 
                 if (os.path.isfile("%s%0d.prmtop" %(RedoxState[0], HEH[idx])) == False):
                     print("""
- parm StrucForPBSA.%s.prmtop
+ parm StrucForPBSA.RefState.prmtop
  changeRedoxState :%0d %0d
  outparm %s%0d.prmtop
  quit
-                    """ %(Output, HEH[idx], RedoxState[1], RedoxState[0], HEH[idx]), file=open(str(RedoxState[0])+str(HEH[idx])+".inp", 'w'))
+                    """ %(HEH[idx], RedoxState[1], RedoxState[0], HEH[idx]), file=open(str(RedoxState[0])+str(HEH[idx])+".inp", 'w'))
 
                     print("\n Generating topology for %sHEH-%0d ..." %(RedoxState[0], HEH[idx]))
                     subprocess.run("parmed -i "+str(RedoxState[0])+str(HEH[idx])+".inp > "+str(RedoxState[0])+str(HEH[idx])+".log", shell=True)
 
-                if (os.path.isfile("pbsa_"+str(RedoxState[0])+str(HEH[idx])) == True):
-                    print(""" 
- Found pbsa_%s%0d from a prior execution.
- This prior output will be used for the analysis.""" %(RedoxState[0], HEH[idx]))
+                if (os.path.isfile(f"pbsa_{RedoxState[0]}{HEH[idx]}_epsin{epsin[idx]}_epsout{epsout[idx]}.out") == True):
+                    print(f""" 
+ Found pbsa_{RedoxState[0]}{HEH[idx]}_epsin{epsin[idx]}_epsout{epsout[idx]}.out from a prior execution.
+ This prior output will be used for the analysis.""")
                 else: 
-                    #print(" Running PBSA calculation for oxidized HEH-%0d ..." %(HEH[idx]))
-                    #subprocess.run("pbsa -O -i pbsa.key -o pbsa_"+str(RedoxState[0])+str(HEH[idx])+" -p "+str(RedoxState[0])+str(HEH[idx])+".prmtop -c StrucForPBSA.rst7", shell=True)
-                    command[idxc] = "pbsa -O -i pbsa.key -o pbsa_"+str(RedoxState[0])+str(HEH[idx])+" -p "+str(RedoxState[0])+str(HEH[idx])+".prmtop -c StrucForPBSA.rst7"
-                    #print(idx, idxc, command[idx])
-                    idxc += 1
+                    if (CompChoice == "SERIAL") or (CompChoice == "Serial") or (CompChoice == "serial") or (CompChoice == "S") or (CompChoice == "s"):
+                        print(f" Running PBSA calculation for {state}. HEH-{HEH[idx]} ...")
+                        subprocess.run(f"pbsa -O -i pbsa-{HEH[idx]}_epsin{epsin[idx]}_epsout{epsout[idx]}.key -o pbsa_{RedoxState[0]}{HEH[idx]}_epsin{epsin[idx]}_epsout{epsout[idx]}.out -p {RedoxState[0]}{HEH[idx]}.prmtop -c StrucForPBSA.rst7", shell=True)
+                    if (CompChoice == "PARALLEL") or (CompChoice == "Parallel") or (CompChoice == "parallel") or (CompChoice == "P") or (CompChoice == "p"):
+                        command[idxc] = f"pbsa -O -i pbsa-{HEH[idx]}_epsin{epsin[idx]}_epsout{epsout[idx]}.key -o pbsa_{RedoxState[0]}{HEH[idx]}_epsin{epsin[idx]}_epsout{epsout[idx]}.out -p {RedoxState[0]}{HEH[idx]}.prmtop -c StrucForPBSA.rst7"
+                        idxc += 1
 
             idx += 1
 
         if (idxc != 0):
-            print("\n Submitting "+str(len(command))+" PBSA calculations in parallel")
+            commandrev = list(filter(None, command))
+            print("\n Submitting "+str(len(commandrev))+" PBSA calculations in parallel")
+            procs = [ subprocess.Popen(i, shell=True) for i in commandrev ]
 
-            procs = [ subprocess.Popen(i, shell=True) for i in command ]
             for p in procs:
                 p.wait()
                 print("  Finished: "+str(p))
@@ -877,34 +1934,60 @@ def DeltaGFromPBSA(Output, Solv):
     for idx in range(len(HEH)):
 
         idx1 = 0; idx2 = 0;
-        with open('pbsa_o'+str(HEH[idx]), 'r') as fp:
-            lines = fp.readlines()
-            for line in lines:
-                word1 = 'Etot'
-                word2 = 'EELEC'
+        word1 = 'Etot'; word2 = 'EELEC'
+        try:
+            with open(f"pbsa_o{HEH[idx]}_epsin{epsin[idx]}_epsout{epsout[idx]}.out", 'r', encoding="utf-8") as fp:
+                lines = fp.readlines()
 
-                if (line.find(word1) != -1) and (idx1 == 0):
-                    EtotOx = float(line.strip().split()[2]) * 0.043 
-                    idx1 += 1
+                for line in lines:
 
-                if (line.find(word2) != -1) and (idx2 == 0):
-                    EelecOx = float(line.strip().split()[2]) * 0.043
-                    idx2 += 1
+                    if (line.find(word1) != -1) and (idx1 == 0):
+                        EtotOx = float(line.strip().split()[2]) * 0.043 
+                        idx1 += 1
+
+                    if (line.find(word2) != -1) and (idx2 == 0):
+                        EelecOx = float(line.strip().split()[2]) * 0.043
+                        idx2 += 1
+        except UnicodeDecodeError:
+            with open(f"pbsa_o{HEH[idx]}_epsin{epsin[idx]}_epsout{epsout[idx]}.out", 'r', encoding="latin-1") as fp:
+                lines = fp.readlines()
+
+                for line in lines:
+
+                    if (line.find(word1) != -1) and (idx1 == 0):
+                        EtotOx = float(line.strip().split()[2]) * 0.043 
+                        idx1 += 1
+
+                    if (line.find(word2) != -1) and (idx2 == 0):
+                        EelecOx = float(line.strip().split()[2]) * 0.043
+                        idx2 += 1
 
         idx3 = 0; idx4 = 0;
-        with open('pbsa_r'+str(HEH[idx]), 'r') as fp:
-            lines = fp.readlines()
-            for line in lines:
-                word1 = 'Etot'
-                word2 = 'EELEC'
+        try:
+            with open(f"pbsa_r{HEH[idx]}_epsin{epsin[idx]}_epsout{epsout[idx]}.out", 'r', encoding="utf-8") as fp:
+                lines = fp.readlines()
 
-                if (line.find(word1) != -1) and (idx3 == 0):
-                    EtotRed = float(line.strip().split()[2]) * 0.043
-                    idx3 += 1
+                for line in lines:
+                    if (line.find(word1) != -1) and (idx3 == 0):
+                        EtotRed = float(line.strip().split()[2]) * 0.043
+                        idx3 += 1
 
-                if (line.find(word2) != -1) and (idx4 == 0):
-                    EelecRed = float(line.strip().split()[2]) * 0.043
-                    idx4 += 1
+                    if (line.find(word2) != -1) and (idx4 == 0):
+                        EelecRed = float(line.strip().split()[2]) * 0.043
+                        idx4 += 1
+
+        except UnicodeDecodeError:
+            with open(f"pbsa_r{HEH[idx]}_epsin{epsin[idx]}_epsout{epsout[idx]}.out", 'r', encoding="latin-1") as fp:
+                lines = fp.readlines()
+
+                for line in lines:
+                    if (line.find(word1) != -1) and (idx3 == 0):
+                        EtotRed = float(line.strip().split()[2]) * 0.043
+                        idx3 += 1
+
+                    if (line.find(word2) != -1) and (idx4 == 0):
+                        EelecRed = float(line.strip().split()[2]) * 0.043
+                        idx4 += 1
 
         DEtot[idx] = (EtotOx - EtotRed) 
         DEelec[idx] = (EelecOx - EelecRed) 
@@ -926,7 +2009,2152 @@ def DeltaGFromPBSA(Output, Solv):
 
 ################################################################################################################################################
 
-def DeltaGFromLIE(Output):
+################################################################################################################################################
+
+def PairedChargeAssignment(Output, HEH, i, j, k, l):
+    if (k == "o"): 
+        kstate = 0
+    if (k == "r"):
+        kstate = 1
+
+    if (l == "o"): 
+        lstate = 0
+    if (l == "r"):
+        lstate = 1
+
+    #print(k, kstate, l, lstate)
+
+    if (os.path.isfile(f"{k}{HEH[i]}-{l}{HEH[j]}.inp") == True):
+        print(f"\n Generating topology for {k}{HEH[i]}-{l}{HEH[j]}  ...")
+        subprocess.run(f"parmed -i {k}{HEH[i]}-{l}{HEH[j]}.inp > {k}{HEH[i]}-{l}{HEH[j]}.log", shell=True)
+    if (os.path.isfile(f"{k}{HEH[i]}-{l}{HEH[j]}.inp") == False):
+        print(f"""
+ parm StrucForPBSA.RefState.prmtop
+ changeRedoxState :{HEH[i]} {kstate}
+ changeRedoxState :{HEH[j]} {lstate}
+ outparm {k}{HEH[i]}-{l}{HEH[j]}.prmtop
+ quit
+        """, file=open(f"{k}{HEH[i]}-{l}{HEH[j]}.inp", 'w'))
+
+        print(f"\n Generating topology for {k}{HEH[i]}-{l}{HEH[j]}  ...")
+        subprocess.run(f"parmed -i {k}{HEH[i]}-{l}{HEH[j]}.inp > {k}{HEH[i]}-{l}{HEH[j]}.log", shell=True)
+
+################################################################################################################################################
+
+################################################################################################################################################
+
+def HemeHemeInt(Output, Solv, HemeType):
+
+    if (os.path.isfile(f"RefState.prmtop") == False):
+        print("""
+ Generating the reference state topology where all hemes
+ are in the reduced state.
+ """)
+        DefineRefState(Output, HemeType)
+    elif (os.path.isfile(f"RefState.prmtop") == True):
+        print("""
+ Found RefState.prmtop
+ """)
+
+    Es = []
+    if (os.path.isfile("Lambda.txt") == True):
+        with open('Lambda.txt', 'r') as fp:
+            lines = fp.readlines()
+            for line in lines:
+                word1 = 'Es        ='
+
+                if (line.find(word1) != -1):
+                    Es.append(float(line.strip().split()[2]))
+
+        if(len(Es) != 0):
+            min_epsin = round(min(Es), 3)
+            min_epsin = round(min(Es), 3)
+            max_epsin = round(max(Es), 3)
+            avg_epsin = round((sum(Es)/len(Es)), 3) 
+
+            while True:
+                SelEpsin = str(input(f""" 
+ The internal dielectric constants range from {min_epsin} to {max_epsin}
+ The average internal dielectric constant is {avg_epsin}
+ 
+ Would you like to use this average value for the PBSA calculations to
+ compute heme-heme interactions? """))
+                if (SelEpsin == "YES") or (SelEpsin == "Yes") or (SelEpsin == "yes") or (SelEpsin == "Y") or (SelEpsin == "y"):
+                    epsin = avg_epsin
+                    break
+
+                elif (SelEpsin == "NO") or (SelEpsin == "No") or (SelEpsin == "no") or (SelEpsin == "N") or (SelEpsin == "n"):
+                    while True:
+                        try:
+                            epsin = round(float(input(" What should the average internal static dielectric constant be? ")), 3)
+                        except ValueError:
+                            print(" Your entry needs to be a floating-poiint number.")
+                        else:
+                            break
+                        break
+                    break
+                else:
+                    print(" Sorry, I didn't understand your response.")
+
+        if(len(Es) == 0):
+            while True:
+                try:
+                    epsin = round(float(input(""" 
+ An average interior static dielectric constant
+ cannot be assigned for the PBSA calculations from 
+ Lambda.txt it was not previously computed. 
+
+ What value would you like to use? """)), 3)
+                except ValueError:
+                    print(" Your entry needs to be a floating-poiint number.")
+                else:
+                    break
+                break
+
+    elif (os.path.isfile("Lambda.txt") == False):
+        while True:
+            try:
+                epsin = round(float(input(""" 
+ An average interior static dielectric constant
+ cannot be assigned for the PBSA calculations from 
+ Lambda.txt because the file does not exist. 
+
+ what value would you like to use? """)), 3)
+            except ValueError:
+                print(" Your entry needs to be a floating-poiint number.")
+            else:
+                break
+            break
+
+    while True:
+        try:
+            epsout = round(float(input(" What should the external static dielectric be? ")), 3)
+        except ValueError:
+            print(" Your entry needs to be a floating-poiint number.")
+        else:
+            break
+        break
+
+    while True:
+        try:
+            istrng = float(input(f" What ionic strength should be used in mM? "))
+        except ValueError:
+            print(" Your entry needs to be a floating-poiint number.")
+        else:
+            break
+   
+    while True:
+        memb = input(f" Should there be an implicit slab membrane? ")
+
+        if (memb == "YES") or (memb == "Yes") or (memb == "yes") or (memb == "Y") or (memb == "y"):
+            membraneopt = 1
+
+            while True:
+                try:
+                    epsmem = float(input(f" What should be the value of the membrane dielectric constant? "))
+                except ValueError:
+                    print(" Your entry needs to be a floating-poiint number.")
+                else:
+                    break
+
+            IPB = 1
+            INP = 0
+            ivalence = 0
+            bcopt = 10
+            eneopt = 1
+            sasopt = 0
+            solvopt = 1
+            smoothopt = 1
+            maxitn = 200
+            nfocus = 1
+
+            while True:
+                SelPoretype = input(f" Does the protein have a solvent-filled channel region that should be automatically detected? ")
+                if (SelPoretype == "YES") or (SelPoretype == "Yes") or (SelPoretype == "yes") or (SelPoretype == "Y") or (SelPoretype == "y"):
+                    poretype = 1
+                    break
+                elif (SelPoretype == "NO") or (SelPoretype == "No") or (SelPoretype == "n") or (SelPoretype == "N") or (SelPoretype == "n"):
+                    poretype = 0
+                    break
+                else:
+                    print(" Sorry, I didn't understand your respond.")
+            break
+        elif (memb == "NO") or (memb == "No") or (memb == "no") or (memb == "N") or (memb == "n"):
+            while True:
+                SelDelphi = input(f" Should a solution-phease Delphi-like calculation be performed? ")
+
+                if (SelDelphi == "YES") or (SelDelphi == "Yes") or (SelDelphi == "yes") or (SelDelphi == "Y") or (SelDelphi == "y"):
+                    membraneopt = 0
+                    poretype = 0
+                    epsmem = epsout
+                    IPB = 1
+                    INP = 0
+                    ivalence = 1
+                    bcopt = 5
+                    eneopt = 2
+                    sasopt = 0
+                    solvopt = 1
+                    smoothopt = 2
+                    maxitn = 100
+                    nfocus = 1
+
+                    break
+
+                elif (SelDelphi == "NO") or (SelDelphi == "No") or (SelDelphi == "n") or (SelDelphi == "N") or (SelDelphi == "n"):
+                    membraneopt = 0
+                    poretype = 0
+                    epsmem = epsout
+                    IPB = 2
+                    INP = 2
+                    ivalence = 0
+                    bcopt = 5
+                    eneopt = 2
+                    sasopt = 0
+                    solvopt = 1
+                    smoothopt = 1
+                    maxitn = 100
+                    nfocus = 2
+
+                    break
+
+                else:
+                    print(" Sorry, I didn't understand your response.")
+            break
+        else:
+            print(" Sorry, I didn't understand your response.")
+
+    if (os.path.isfile(f"pbsa_epsin{epsin}_epsout{epsout}.key") == True):
+        print(f""" 
+ Found pbsa_epsin{epsin}_epsout{epsout}.key to be used in PBSA calculation""")
+    elif (os.path.isfile(f"pbsa_epsin{epsin}_epsout{epsout}.key") == False):
+        print(f"""
+ Single point PB calculation
+ &cntrl
+  IPB={IPB},             ! Dielectric interface model with the level-set funciton
+  INP={INP},             ! Non-polar solvation free energy method   
+  ntx=1,             ! Read formatted coordinates from inpcrd 
+  imin=1,            ! Single-point energy evalulation 
+ /
+
+ &pb
+  pbtemp=300,        ! Temperature for salt effects in PB equation 
+  ivalence={ivalence},        ! 
+  istrng={istrng},      ! Ionic strength in mM for PB equation 
+  epsin={epsin},       ! Solute region dielectric constant 
+  epsout={epsout},       ! Solvent region dielectric constant 
+  epsmem={epsmem},       ! Membrane dielectric constant
+  membraneopt={membraneopt},     ! Turn off/on implicit slab membrane
+  mthick=40.0        ! Membrane thickness in Å
+  mctrdz=0,          ! Membrane center in Z direction Å; 0 = centered at center of protein 
+  poretype={poretype},        ! Turn off(0)/on(1) pore-searching algorithm
+  radiopt=0,         ! Atomic radii from topology used; optimized radius (choice 1) for FE is missing 
+  dprob=1.4,         ! Solvent probe radius for molecular surface definition  
+  iprob=2.0,         ! Mobile ion probe radius used to define the Stern layer. 
+  mprob=2.7,         ! Membrane lipid probe radius 
+  sasopt=0,          ! Use solvent-excluded surface type for solute 
+  triopt=1,          ! Use trimer arc dots to map analytical solvent excluded surface  
+  arcres=0.25,       ! Resolution of dots (in Å) used to represent solvent-accessible arcs 
+  smoothopt={smoothopt},       ! Use weighted harmonic average of epsin and epsout for boundary grid edges across solute/solvent dielectric boundary 
+  saopt=1,           ! Compute solute surface area 
+  decompopt=2,       ! sigma decomposiiton scheme for non-polar solvation 
+  use_rmin=1,        ! Use rmin for van der waals radi, improves agreement with TIP3P
+  sprob=0.557,       ! Compute dispersion term using solvent probe radius (in Å) for solvent accessible surface area 
+  vprob=1.300,       ! Compute non-polar cavity solvation free energy using olvent probe radius (in Å) for molecular volume 
+  rhow_effect=1.129, ! Effective water density for non-polar dispersion term
+  use_sav=1,         ! Use molecular volume for cavity term
+  maxsph=400,        ! Approximate number of dots to represent the maximum atomic solvent accessible surface
+  npbopt=0,          ! Linear PB equation is solved  
+  solvopt=1,         ! ICCG/PICCG iterative solver 
+  accept=0.001,      ! Iteration convergence criterion   
+  maxitn={maxitn},        ! Maximum number of iterations for finite difference solver 
+  fillratio=1.5,     ! ratio between longest dimension of rectangular finite-difference grid and that of the solute    
+  space=0.5,         ! Grid spacing for finite-difference solver 
+  nfocus={nfocus},          ! Number of successive FD calculations for electrostatic focusing  
+  fscale=8,          ! Ratio between coarse and fine grid spacings in electrostatic focussing 
+  npbgrid=1,         ! Frequency for regenerating finite-difference grid 
+  bcopt={bcopt},           ! Boundary grid potentials computed using all grid charges
+  eneopt={eneopt},          ! Reaction field energy computed using dielectric boundary surface charges 
+  frcopt=2,          ! reaction field forces and dielectric boundary forces computed with dielectric boundary surface polarized charges 
+  scalec=0,          ! Dielectric boundary surface charges are not scaled before computing reaction field energy and forces
+  cutfd=5,           ! Atom-based cutoff distance to remove short-range finite-difference interactions and to add pairwise charge-based interactions
+  cutnb=0,           ! Atom-based cutoff distance for van der Waals interactions and pairwise Coulombic interactions when eneopt=2   
+  !phiout=1,         ! Output spatial distribution of electrostatic potential f
+  !phiform=2,        ! DX format of the electrostatic potential file for VMD
+  !outlvlset=true,   ! Output total level set, used in locating interfaces between regions of differing dielectric constant
+  !outmlvlset=true,  ! Output membrane level set, used in locating interfaces between regions of differing dielectric constant
+  !npbverb=1,        ! Output verbosity; 1 is verbose 
+  !isurfchg=1,       ! Save surface changes to a file
+ /
+        """, file=open(f"pbsa_epsin{epsin}_epsout{epsout}.key", 'w'))
+
+    if (Solv == "EXPLICIT") or (Solv == "Explicit") or (Solv == "explicit") or (Solv == "E") or (Solv == "e"):
+        if (os.path.isfile("GenerateCoordForPBSA.in") == True):
+            if (os.path.isfile("StrucForPBSA.RefState.prmtop") == True) and (os.path.isfile("StrucForPBSA.rst7") == True):
+                print(f" Found StrucForPBSA.RefState.prmtop & StrucForPBSA.rst7")
+        elif (os.path.isfile("GenerateCoordForPBSA.in") == False):
+            print("""
+ parm    RefSTate.prmtop
+ trajin  min.rst7
+ strip   :WAT,Na+,Cl- outprefix StrucForPBSA
+ trajout StrucForPBSA.rst7
+ run
+            """, file=open("GenerateCoordForPBSA.in", 'w'))
+            subprocess.run("cpptraj -i GenerateCoordForPBSA.in > GenerateCoordForPBSA.log", shell=True)
+    elif (Solv == "IMPLICIT") or (Solv == "Implicit") or (Solv == "implicit") or (Solv == "I") or (Solv == "i"):
+        if (os.path.isfile("GenerateCoordForPBSA.in") == True):
+            if (os.path.isfile("StrucForPBSA.RefState.prmtop") == True) and (os.path.isfile("StrucForPBSA.rst7") == True):
+                print(f" Found StrucForPBSA.RefState.prmtop & StrucForPBSA.rst7")
+        elif (os.path.isfile("GenerateCoordForPBSA.in") == False):
+            print("""
+ parm    RefState.prmtop
+ trajin  min.rst7
+ parmwrite out StrucForPBSA.RefState.prmtop
+ trajout StrucForPBSA.rst7
+ run
+            """, file=open("GenerateCoordForPBSA.in", 'w'))
+            subprocess.run("cpptraj -i GenerateCoordForPBSA.in > GenerateCoordForPBSA.log", shell=True)
+
+    while True:
+        CompChoice = input(" Do you wish to run any needed computaitons in serial or parallel (s/p)? ")
+
+        if (CompChoice == "SERIAL") or (CompChoice == "Serial") or (CompChoice == "serial") or (CompChoice == "S") or (CompChoice == "s") or (CompChoice == "PARALLEL") or (CompChoice == "Parallel") or (CompChoice == "parallel") or (CompChoice == "P") or (CompChoice == "p"):
+            break
+        else:
+            print(" Sorry, I didn't understand your choice. Please try again.")
+
+    idx = 0
+    with open("LinearizedHemeSequence.txt") as fp:
+        x = len(fp.readlines())
+        HEH = [0]*x
+
+        fp.seek(0)
+        Lines = fp.readlines()
+        for line in Lines:
+            HEH[idx] = int(line.strip().split(" ")[1])
+            idx += 1
+
+    M = [[0 for column in range(len(HEH))] for row in range(len(HEH))]
+    N = [[0 for column in range(4)] for row in range(4)]
+
+    print("State Energies", file=open('StateEnergies.txt', 'w'))
+    print("""
+ Each line in this file indicates from left-to-right:
+
+ Fields 1 & 2: 
+    The redox state (o = oxidized/r = reduced) and 
+    zero-based index of the first heme in the 
+    considered pair
+ Fields 3 & 4: 
+    The redox state (o = oxidized/r = reduced) and 
+    zero-based index of the second heme in the 
+    considered pair
+ Field 5: 
+    The total system energy computed with PBSA for 
+    the specified redox microstates. If there are 
+    more than two hemes, the hemes not specified 
+    on a given line are in the reduced state.
+
+ The end of the file presents the matrix of state energies
+ where diagonal elements are oxidation energies and 
+ off-diagonal elements are interaction energies.
+
+ All energies are in meV and relative to the fully reduced
+ system. Positive interaction energies indicate how much 
+ the oxidaiton of one heme is disfavored byt he oxidaiton 
+ of the adjacent heme. \n
+ """, file=open('StateEnergies.txt', 'a'))
+
+    for i in range(0, len(HEH)):
+        for j in range(0, len(HEH)):
+            if (j == i):
+                pass
+            if (j != i):
+                idxc = 0
+                command = ['']*(4)
+                print(f"""
+ ================================================
+ Analyzing pair {HEH[i]} - {HEH[j]}...
+ ================================================""")
+
+                for k in ("o", "r"):
+                    for l in ("o", "r"):
+
+                        if (k == "o") and (l == "o"):
+                            if (os.path.isfile(f"{k}{HEH[i]}-{l}{HEH[j]}.prmtop") == False):
+                                PairedChargeAssignment(Output, HEH, i, j, k, l)
+
+                            if (os.path.isfile(f"{k}{HEH[i]}-{l}{HEH[j]}.prmtop") == True):
+                                if (os.path.isfile(f"pbsa_{k}{HEH[i]}-{l}{HEH[j]}_epsin{epsin}_epsout{epsout}.out") == True):
+                                    print(f""" 
+ Found pbsa_{k}{HEH[i]}-{l}{HEH[j]}_epsin{epsin}_epsout{epsout}.out from a prior execution.
+ This prior output will be used for the analysis.""")
+                                elif (os.path.isfile(f"pbsa_{k}{HEH[i]}-{l}{HEH[j]}_epsin{epsin}_epsout{epsout}.out") == False):
+                                    print(f""" 
+ Did not find pbsa_{k}{HEH[i]}-{l}{HEH[j]}_epsin{epsin}_epsout{epsout}.out from a prior execution.
+ The calculation will be submitted.""")
+                                    if (CompChoice == "SERIAL") or (CompChoice == "Serial") or (CompChoice == "serial") or (CompChoice == "S") or (CompChoice == "s"):
+                                        print(f" Running PBSA calculation for {k}{HEH[i]}-{l}{HEH[j]} with epsin {epsin} and epsout {epsout}...")
+                                        subprocess.run(f"pbsa -O -i pbsa_epsin{epsin}_epsout{epsout}.key -o pbsa_{k}{HEH[i]}-{l}{HEH[j]}_epsin{epsin}_epsout{epsout}.out -p {k}{HEH[i]}-{l}{HEH[j]}.prmtop -c StrucForPBSA.rst7", shell=True)
+                                    if (CompChoice == "PARALLEL") or (CompChoice == "Parallel") or (CompChoice == "parallel") or (CompChoice == "P") or (CompChoice == "p"):
+                                        command[idxc] = f"pbsa -O -i pbsa_epsin{epsin}_epsout{epsout}.key -o pbsa_{k}{HEH[i]}-{l}{HEH[j]}_epsin{epsin}_epsout{epsout}.out -p {k}{HEH[i]}-{l}{HEH[j]}.prmtop -c StrucForPBSA.rst7"
+                                        idxc += 1
+
+                        if (k == "r") and (l == "o"):
+                            if (os.path.isfile(f"{k}{HEH[i]}-{l}{HEH[j]}.prmtop") == False):
+                                PairedChargeAssignment(Output, HEH, i, j, k, l)
+
+                            if (os.path.isfile(f"{k}{HEH[i]}-{l}{HEH[j]}.prmtop") == True):
+                                if (os.path.isfile(f"pbsa_{k}{HEH[i]}-{l}{HEH[j]}_epsin{epsin}_epsout{epsout}.out") == True):
+                                    print(f""" 
+ Found pbsa_{k}{HEH[i]}-{l}{HEH[j]}_epsin{epsin}_epsout{epsout}.out from a prior execution.
+ This prior output will be used for the analysis.""")
+                                elif (os.path.isfile(f"pbsa_{k}{HEH[i]}-{l}{HEH[j]}_epsin{epsin}_epsout{epsout}.out") == False):
+                                    print(f""" 
+ Did not find pbsa_{k}{HEH[i]}-{l}{HEH[j]}_epsin{epsin}_epsout{epsout}.out from a prior execution.
+ The calculation will be submitted.""")
+                                    if (CompChoice == "SERIAL") or (CompChoice == "Serial") or (CompChoice == "serial") or (CompChoice == "S") or (CompChoice == "s"):
+                                        print(f" Running PBSA calculation for {k}{HEH[i]}-{l}{HEH[j]} with epsin {epsin} and epsout {epsout}...")
+                                        subprocess.run(f"pbsa -O -i pbsa_epsin{epsin}_epsout{epsout}.key -o pbsa_{k}{HEH[i]}-{l}{HEH[j]}_epsin{epsin}_epsout{epsout}.out -p {k}{HEH[i]}-{l}{HEH[j]}.prmtop -c StrucForPBSA.rst7", shell=True)
+                                    if (CompChoice == "PARALLEL") or (CompChoice == "Parallel") or (CompChoice == "parallel") or (CompChoice == "P") or (CompChoice == "p"):
+                                        command[idxc] = f"pbsa -O -i pbsa_epsin{epsin}_epsout{epsout}.key -o pbsa_{k}{HEH[i]}-{l}{HEH[j]}_epsin{epsin}_epsout{epsout}.out -p {k}{HEH[i]}-{l}{HEH[j]}.prmtop -c StrucForPBSA.rst7"
+                                        idxc += 1
+
+                        if (k == "o") and (l == "r"):
+                            if (os.path.isfile(f"{k}{HEH[i]}-{l}{HEH[j]}.prmtop") == False):
+                                PairedChargeAssignment(Output, HEH, i, j, k, l)
+
+                            if (os.path.isfile(f"{k}{HEH[i]}-{l}{HEH[j]}.prmtop") == True):
+                                if (os.path.isfile(f"pbsa_{k}{HEH[i]}-{l}{HEH[j]}_epsin{epsin}_epsout{epsout}.out") == True):
+                                    print(f""" 
+ Found pbsa_{k}{HEH[i]}-{l}{HEH[j]}_epsin{epsin}_epsout{epsout}.out from a prior execution.
+ This prior output will be used for the analysis.""")
+                                elif (os.path.isfile(f"pbsa_{k}{HEH[i]}-{l}{HEH[j]}_epsin{epsin}_epsout{epsout}.out") == False):
+                                    print(f""" 
+ Did not find pbsa_{k}{HEH[i]}-{l}{HEH[j]}_epsin{epsin}_epsout{epsout}.out from a prior execution.
+ The calculation will be submitted.""")
+                                    if (CompChoice == "SERIAL") or (CompChoice == "Serial") or (CompChoice == "serial") or (CompChoice == "S") or (CompChoice == "s"):
+                                        print(f" Running PBSA calculation for {k}{HEH[i]}-{l}{HEH[j]} with epsin {epsin} and epsout {epsout}...")
+                                        subprocess.run(f"pbsa -O -i pbsa_epsin{epsin}_epsout{epsout}.key -o pbsa_{k}{HEH[i]}-{l}{HEH[j]}_epsin{epsin}_epsout{epsout}.out -p {k}{HEH[i]}-{l}{HEH[j]}.prmtop -c StrucForPBSA.rst7", shell=True)
+                                    if (CompChoice == "PARALLEL") or (CompChoice == "Parallel") or (CompChoice == "parallel") or (CompChoice == "P") or (CompChoice == "p"):
+                                        command[idxc] = f"pbsa -O -i pbsa_epsin{epsin}_epsout{epsout}.key -o pbsa_{k}{HEH[i]}-{l}{HEH[j]}_epsin{epsin}_epsout{epsout}.out -p {k}{HEH[i]}-{l}{HEH[j]}.prmtop -c StrucForPBSA.rst7"
+                                        idxc += 1
+
+                        if (k == "r") and (l == "r"):
+                            if (os.path.isfile(f"{k}{HEH[i]}-{l}{HEH[j]}.prmtop") == False):
+                                PairedChargeAssignment(Output, HEH, i, j, k, l)
+
+                            if (os.path.isfile(f"{k}{HEH[i]}-{l}{HEH[j]}.prmtop") == True):
+                                if (os.path.isfile(f"pbsa_{k}{HEH[i]}-{l}{HEH[j]}_epsin{epsin}_epsout{epsout}.out") == True):
+                                    print(f""" 
+ Found pbsa_{k}{HEH[i]}-{l}{HEH[j]}_epsin{epsin}_epsout{epsout}.out from a prior execution.
+ This prior output will be used for the analysis.""")
+                                elif (os.path.isfile(f"pbsa_{k}{HEH[i]}-{l}{HEH[j]}_epsin{epsin}_epsout{epsout}.out") == False):
+                                    print(f""" 
+ Did not find pbsa_{k}{HEH[i]}-{l}{HEH[j]}_epsin{epsin}_epsout{epsout}.out from a prior execution.
+ The calculation will be submitted.""")
+                                    if (CompChoice == "SERIAL") or (CompChoice == "Serial") or (CompChoice == "serial") or (CompChoice == "S") or (CompChoice == "s"):
+                                        print(f" Running PBSA calculation for {k}{HEH[i]}-{l}{HEH[j]} with epsin {epsin} and epsout {epsout}...")
+                                        subprocess.run(f"pbsa -O -i pbsa_epsin{epsin}_epsout{epsout}.key -o pbsa_{k}{HEH[i]}-{l}{HEH[j]}_epsin{epsin}_epsout{epsout}.out -p {k}{HEH[i]}-{l}{HEH[j]}.prmtop -c StrucForPBSA.rst7", shell=True)
+                                    if (CompChoice == "PARALLEL") or (CompChoice == "Parallel") or (CompChoice == "parallel") or (CompChoice == "P") or (CompChoice == "p"):
+                                        command[idxc] = f"pbsa -O -i pbsa_epsin{epsin}_epsout{epsout}.key -o pbsa_{k}{HEH[i]}-{l}{HEH[j]}_epsin{epsin}_epsout{epsout}.out -p {k}{HEH[i]}-{l}{HEH[j]}.prmtop -c StrucForPBSA.rst7"
+                                        idxc += 1
+            
+                if (idxc != 0):
+                    commandrev = list(filter(None, command))
+                    print("\n Submitting "+str(len(commandrev))+" PBSA calculations in parallel")
+                    procs = [ subprocess.Popen(i, shell=True) for i in commandrev ]
+
+                    for p in procs:
+                        p.wait()
+                        print("  Finished: "+str(p))
+
+                chk = 4
+                if (os.path.isfile(f"pbsa_o{HEH[i]}-o{HEH[j]}_epsin{epsin}_epsout{epsout}.out") == False):
+                    chk -= 1
+                    print(f" Something went wrong! pbsa_o{HEH[i]}-o{HEH[j]}_epsin{epsin}_epsout{epsout}.out is missing.""")
+                if (os.path.isfile(f"pbsa_o{HEH[i]}-r{HEH[j]}_epsin{epsin}_epsout{epsout}.out") == False):
+                    chk -= 1
+                    print(f" Something went wrong! pbsa_o{HEH[i]}-r{HEH[j]}_epsin{epsin}_epsout{epsout}.out is missing.""")
+                if (os.path.isfile(f"pbsa_r{HEH[i]}-o{HEH[j]}_epsin{epsin}_epsout{epsout}.out") == False):
+                    chk -= 1
+                    print(f" Something went wrong! pbsa_r{HEH[i]}-o{HEH[j]}_epsin{epsin}_epsout{epsout}.out is missing.""")
+                if (os.path.isfile(f"pbsa_r{HEH[i]}-r{HEH[j]}_epsin{epsin}_epsout{epsout}.out") == False):
+                    chk -= 1
+                    print(f" Something went wrong! pbsa_r{HEH[i]}-r{HEH[j]}_epsin{epsin}_epsout{epsout}.out is missing.""")
+
+                if (chk == 4):
+                   #print(" All four files found") 
+                     
+                    for k in ("o", "r"):
+                        for l in ("o", "r"):
+
+                            if (k == "o") and (l == "o"):
+                                idx = 0
+                                with open(f"pbsa_{k}{HEH[i]}-{l}{HEH[j]}_epsin{epsin}_epsout{epsout}.out", 'r', encoding="latin-1") as fp:
+                                    lines = fp.readlines()
+                                    for line in lines:
+                                        word1 = 'Etot'
+
+                                        if (line.find(word1) != -1) and (idx == 0):
+                                            N[0][0] = float(line.strip().split()[2]) * 0.043 
+                                            print(k, i, l, j, round(N[0][0], 3), file=open('StateEnergies.txt', 'a'))
+                                            idx += 1
+
+                            if (k == "o") and (l == "r"):
+                                idx = 0
+                                with open(f"pbsa_{k}{HEH[i]}-{l}{HEH[j]}_epsin{epsin}_epsout{epsout}.out", 'r', encoding="latin-1") as fp:
+                                    lines = fp.readlines()
+                                    for line in lines:
+                                        word1 = 'Etot'
+
+                                        if (line.find(word1) != -1) and (idx == 0):
+                                            N[0][1] = float(line.strip().split()[2]) * 0.043 
+                                            print(k, i, l, j, round(N[0][1], 3), file=open('StateEnergies.txt', 'a'))
+                                            idx += 1
+
+                            if (k == "r") and (l == "o"):
+                                idx = 0
+                                with open(f"pbsa_{k}{HEH[i]}-{l}{HEH[j]}_epsin{epsin}_epsout{epsout}.out", 'r', encoding="latin-1") as fp:
+                                    lines = fp.readlines()
+                                    for line in lines:
+                                        word1 = 'Etot'
+
+                                        if (line.find(word1) != -1) and (idx == 0):
+                                            N[1][0] = float(line.strip().split()[2]) * 0.043 
+                                            print(k, i, l, j, round(N[1][0], 3), file=open('StateEnergies.txt', 'a'))
+                                            idx += 1
+                                    
+                            if (k == "r") and (l == "r"):
+                                idx = 0
+                                with open(f"pbsa_{k}{HEH[i]}-{l}{HEH[j]}_epsin{epsin}_epsout{epsout}.out", 'r', encoding="latin-1") as fp:
+                                    lines = fp.readlines()
+                                    for line in lines:
+                                        word1 = 'Etot'
+
+                                        if (line.find(word1) != -1) and (idx == 0):
+                                            N[1][1] = float(line.strip().split()[2]) * 0.043 
+                                            print(k, i, l, j, round(N[1][1], 3), file=open('StateEnergies.txt', 'a'))
+                                            idx += 1
+
+                M[i][i] = round(((N[0][1] - N[1][1]))*1000, 3)
+                M[i][j] = round(((N[0][0] - N[1][0]) - (N[0][1] - N[1][1]))*1000, 3)
+                M[j][i] = round(((N[0][0] - N[0][1]) - (N[1][0] - N[1][1]))*1000, 3)
+                M[j][j] = round(((N[1][0] - N[1][1]))*1000, 3)
+    print("""
+ Matrix of State Energies:
+    Diagonal terms = oxidation energies
+    Off-diagonal terms = interaction energies
+
+    All energies are in meV and relative to the fully reduced
+    system. Positive interaction energies indicate how much 
+    the oxidaiton of one heme is disfavored byt he oxidaiton 
+    of the adjacent heme.\n """)
+
+    print(*M, sep='\n')
+
+    print("""
+ This data and the individual state energies on whcih 
+ it is based is saved to StateEnergies.txt.""")
+
+    print("\n", *M, sep='\n', file=open('StateEnergies.txt', 'a'))
+
+################################################################################################################################################
+
+################################################################################################################################################
+
+def DeltaGFromPBSA_HemeB(Output, Solv, PolySel, HemeType):
+
+    if (os.path.isfile(f"RefState.prmtop") == False):
+        print("""
+ Generating the reference state topology where all hemes
+ are in the reduced state.
+ """)
+        DefineRefState(Output, HemeType)
+    elif (os.path.isfile(f"RefState.prmtop") == True):
+        print("""
+ Found RefState.prmtop
+ """)
+
+    if (Solv == "EXPLICIT")  or (Solv == "Explicit") or (Solv == "explicit") or (Solv == "E") or (Solv == "e"):
+        print("""
+ parm    RefState.prmtop
+ trajin  min.rst7
+ strip   :WAT,Na+,Cl- outprefix StrucForPBSA
+ trajout StrucForPBSA.rst7
+ run
+        """, file=open("GenerateCoordForPBSA.in", 'w'))
+        subprocess.run("cpptraj -i GenerateCoordForPBSA.in > GenerateCoordForPBSA.log", shell=True)
+    else:
+        print("""
+ parm    RefState.prmtop
+ trajin  min.rst7
+ parmwrite out StrucForPBSA.RefState.prmtop
+ trajout StrucForPBSA.rst7
+ run
+        """, file=open("GenerateCoordForPBSA.in", 'w'))
+        subprocess.run("cpptraj -i GenerateCoordForPBSA.in > GenerateCoordForPBSA.log", shell=True)
+
+    while True:
+        CompChoice = input(" Do you wish to run any needed computaitons in serial or parallel (s/p)? ")
+
+        if (CompChoice == "SERIAL") or (CompChoice == "Serial") or (CompChoice == "serial") or (CompChoice == "S") or (CompChoice == "s") or (CompChoice == "PARALLEL") or (CompChoice == "Parallel") or (CompChoice == "parallel") or (CompChoice == "P") or (CompChoice == "p"):
+            break
+        else:
+            print(" Sorry, I didn't understand your choice. Please try again.")
+
+    Es = []
+    if (os.path.isfile(f"Lambda.txt") == True):
+        with open('Lambda.txt', 'r') as fp:
+            lines = fp.readlines()
+            for line in lines:
+                word1 = 'Es        ='
+
+                if (line.find(word1) != -1):
+                    Es.append(float(line.strip().split()[2]))
+
+    elif (os.path.isfile(f"Lambda.txt") == False):
+        print(""" 
+ Interior static dielectric constants cannot be assigned
+ from Lambda.txt for the PBSA calculations because the file
+ was not found. You will be asked to specify this parameter.
+ """)
+
+    HisID = []; HebID = []; HEM = []
+    with open("BondDefinitions.txt") as f:
+        for line in f:
+            HisID.append(int(line.strip().split('.')[1]))
+            HebID.append(int(line.strip().split('.')[3]))
+
+    for i in range(0, len(HisID), 2):
+        HEM.append([HebID[i], HisID[i], HisID[i+1]])
+    
+    idxc = 0
+    epsin = [0]*(len(HEM))
+    epsout = [0]*(len(HEM))
+    command = [' ']*(2*len(HEM))
+
+    for idx in range(len(HEM)):
+       #print(HEM[idx][0], HEM[idx][1], HEM[idx][2])
+
+        if (len(Es) != 0) and (idx == 0):
+            epsin[idx] = round(Es[idx], 3)
+            while True:
+                SelEpsin = input(f""" 
+ The internal static dielectric constant for HEM-{HEM[idx][0]} is {epsin[idx]}.
+ Should this value be used? """)
+                if (SelEpsin == "YES") or (SelEpsin == "Yes") or (SelEpsin == "yes") or (SelEpsin == "Y") or (SelEpsin == "y"):
+                    pass
+                    break
+                elif (SelEpsin == "NO") or (SelEpsin == "No") or (SelEpsin == "no") or (SelEpsin == "N") or (SelEpsin == "n"):
+                    while True:
+                        try:
+                            epsin[idx] = round(float(input(f" What should the internal dielectric constant be for the PBSA calculation on HEM-{HEM[idx][0]}? ")), 3)
+                        except ValueError:
+                            print(" Your entry needs to be a floating-poiint number.")
+                        else:
+                            break
+                    break
+                else:
+                    print(" Sorry, I didn't understand your response. ")
+
+        elif (len(Es) != 0) and (idx != 0) and (idx != len(HEM)-1):
+            epsin[idx] = round(((Es[idx-1] + Es[idx])/2), 3)
+            while True:
+                SelEpsin = input(f""" 
+ The internal static dielectric constant for HEM-{HEM[idx][0]} is {epsin[idx]}.
+ Should this value be used? """)
+                if (SelEpsin == "YES") or (SelEpsin == "Yes") or (SelEpsin == "yes") or (SelEpsin == "Y") or (SelEpsin == "y"):
+                    pass
+                    break
+                elif (SelEpsin == "NO") or (SelEpsin == "No") or (SelEpsin == "no") or (SelEpsin == "N") or (SelEpsin == "n"):
+                    while True:
+                        try:
+                            epsin[idx] = round(float(input(f" What should the internal dielectric constant be for the PBSA calculation on HEM-{HEM[idx][0]}? ")), 3)
+                        except ValueError:
+                            print(" Your entry needs to be a floating-poiint number.")
+                        else:
+                            break
+                    break
+                else:
+                    print(" Sorry, I didn't understand your response. ")
+
+        elif (len(Es) != 0) and (idx == len(HEM)-1):
+            if (PolySel == 'NO') or (PolySel == "No") or (PolySel == 'no') or (PolySel == "N") or (PolySel == "n"):
+                epsin[idx] = round(Es[len(Es)-1], 3)
+            if (PolySel == 'YES') or (PolySel == 'Yes') or (PolySel == "yes") or (PolySel == "Y") or (PolySel == "y"):
+                epsin[idx] = round(((Es[len(Es)-1] + Es[0])/2), 3)
+            while True:
+                SelEpsin = input(f""" 
+ The internal static dielectric constant for HEM-{HEM[idx][0]} is {epsin[idx]}.
+ If you inidcated the structure is polymeric, this vlaue is the average
+ of the dielectric constants for the last pair and first pair of hemes
+ from the unit cell.
+
+ Should this value be used? """)
+                if (SelEpsin == "YES") or (SelEpsin == "Yes") or (SelEpsin == "yes") or (SelEpsin == "Y") or (SelEpsin == "y"):
+                    pass
+                    break
+                elif (SelEpsin == "NO") or (SelEpsin == "No") or (SelEpsin == "no") or (SelEpsin == "N") or (SelEpsin == "n"):
+                    while True:
+                        try:
+                            epsin[idx] = round(float(input(f" What should the internal dielectric constant be for the PBSA calculation on HEM-{HEM[idx][0]}? ")), 3)
+                        except ValueError:
+                            print(" Your entry needs to be a floating-poiint number.")
+                        else:
+                            break
+                    break
+                else:
+                    print(" Sorry, I didn't understand your response. ")
+
+        elif (len(Es) == 0):
+            while True:
+                try:
+                    epsin[idx] = round(float(input(f" What should the internal dielectric constant be for the PBSA calculation on HEM-{HEM[idx][0]}? ")), 3)
+                except ValueError:
+                    print(" Your entry needs to be a floating-poiint number.")
+                else:
+                    break
+
+        while True:
+            try:
+                epsout[idx] = round(float(input(" What should the external dielectric constant be? ")), 3)
+            except ValueError:
+                print(" Your entry needs to be a floating-poiint number.")
+            else:
+                break
+
+        while True:
+            try:
+                istrng = float(input(f" What ionic strength should be used in mM? "))
+            except ValueError:
+                print(" Your entry needs to be a floating-poiint number.")
+            else:
+                break
+   
+        while True:
+            memb = input(f" Should there be an implicit slab membrane? ")
+
+            if (memb == "YES") or (memb == "Yes") or (memb == "yes") or (memb == "Y") or (memb == "y"):
+                membraneopt = 1
+
+                while True:
+                    try:
+                        epsmem = float(input(f" What should be the value of the membrane dielectric constant? "))
+                    except ValueError:
+                        print(" Your entry needs to be a floating-poiint number.")
+                    else:
+                        break
+
+                IPB = 1
+                INP = 0
+                ivalence = 0
+                bcopt = 10
+                eneopt = 1
+                sasopt = 0
+                solvopt = 1
+                smoothopt = 1
+                maxitn = 200
+                nfocus = 1
+
+                while True:
+                    SelPoretype = input(f" Does the protein have a solvent-filled channel region that should be automatically detected? ")
+                    if (SelPoretype == "YES") or (SelPoretype == "Yes") or (SelPoretype == "yes") or (SelPoretype == "Y") or (SelPoretype == "y"):
+                        poretype = 1
+                        break
+                    elif (SelPoretype == "NO") or (SelPoretype == "No") or (SelPoretype == "n") or (SelPoretype == "N") or (SelPoretype == "n"):
+                        poretype = 0
+                        break
+                    else:
+                        print(" Sorry, I didn't understand your respond.")
+                break
+            elif (memb == "NO") or (memb == "No") or (memb == "no") or (memb == "N") or (memb == "n"):
+                while True:
+                    SelDelphi = input(f" Should a solution-phease Delphi-like calculation be performed? ")
+
+                    if (SelDelphi == "YES") or (SelDelphi == "Yes") or (SelDelphi == "yes") or (SelDelphi == "Y") or (SelDelphi == "y"):
+                        membraneopt = 0
+                        poretype = 0
+                        epsmem = epsout[idx]
+                        IPB = 1
+                        INP = 0
+                        ivalence = 1
+                        bcopt = 5
+                        eneopt = 2
+                        sasopt = 0
+                        solvopt = 1
+                        smoothopt = 2
+                        maxitn = 100
+                        nfocus = 1
+
+                        break
+
+                    elif (SelDelphi == "NO") or (SelDelphi == "No") or (SelDelphi == "n") or (SelDelphi == "N") or (SelDelphi == "n"):
+                        membraneopt = 0
+                        poretype = 0
+                        epsmem = epsout[idx]
+                        IPB = 2
+                        INP = 2
+                        ivalence = 0
+                        bcopt = 5
+                        eneopt = 2
+                        sasopt = 0
+                        solvopt = 1
+                        smoothopt = 1
+                        maxitn = 100
+                        nfocus = 2
+
+                        break
+
+                    else:
+                        print(" Sorry, I didn't understand your response.")
+                break
+            else:
+                print(" Sorry, I didn't understand your response.")
+
+        if (os.path.isfile(f"pbsa-{HEM[idx][0]}_epsin{epsin[idx]}_epsout{epsout[idx]}.key") == True):
+            print(f""" 
+ Found pbsa-{HEM[idx][0]}_epsin{epsin[idx]}_epsout{epsout[idx]}.key to be used in PBSA calculation for HEM-{HEM[idx][0]}""")
+        elif (os.path.isfile(f"pbsa-{HEM[idx][0]}_epsin{epsin[idx]}_epsout{epsout[idx]}.key") == False):
+            print(f"""
+ Single point PB calculation
+ &cntrl
+  IPB={IPB},             ! Dielectric interface model with the level-set funciton
+  INP={INP},             ! Non-polar solvation free energy method   
+  ntx=1,             ! Read formatted coordinates from inpcrd 
+  imin=1,            ! Single-point energy evalulation 
+ /
+
+ &pb
+  pbtemp=300,        ! Temperature for salt effects in PB equation 
+  ivalence={ivalence},        ! 
+  istrng={istrng},      ! Ionic strength in mM for PB equation 
+  epsin={epsin[idx]},       ! Solute region dielectric constant 
+  epsout={epsout[idx]},       ! Solvent region dielectric constant 
+  epsmem={epsmem},       ! Membrane dielectric constant
+  membraneopt={membraneopt},     ! Turn off/on implicit slab membrane
+  mthick=40.0        ! Membrane thickness in Å
+  mctrdz=0,          ! Membrane center in Z direction Å; 0 = centered at center of protein 
+  poretype={poretype},        ! Turn off(0)/on(1) pore-searching algorithm
+  radiopt=0,         ! Atomic radii from topology used; optimized radius (choice 1) for FE is missing 
+  dprob=1.4,         ! Solvent probe radius for molecular surface definition  
+  iprob=2.0,         ! Mobile ion probe radius used to define the Stern layer. 
+  mprob=2.7,         ! Membrane lipid probe radius 
+  sasopt=0,          ! Use solvent-excluded surface type for solute 
+  triopt=1,          ! Use trimer arc dots to map analytical solvent excluded surface  
+  arcres=0.25,       ! Resolution of dots (in Å) used to represent solvent-accessible arcs 
+  smoothopt={smoothopt},       ! Use weighted harmonic average of epsin and epsout for boundary grid edges across solute/solvent dielectric boundary 
+  saopt=1,           ! Compute solute surface area 
+  decompopt=2,       ! sigma decomposiiton scheme for non-polar solvation 
+  use_rmin=1,        ! Use rmin for van der waals radi, improves agreement with TIP3P
+  sprob=0.557,       ! Compute dispersion term using solvent probe radius (in Å) for solvent accessible surface area 
+  vprob=1.300,       ! Compute non-polar cavity solvation free energy using olvent probe radius (in Å) for molecular volume 
+  rhow_effect=1.129, ! Effective water density for non-polar dispersion term
+  use_sav=1,         ! Use molecular volume for cavity term
+  maxsph=400,        ! Approximate number of dots to represent the maximum atomic solvent accessible surface
+  npbopt=0,          ! Linear PB equation is solved  
+  solvopt=1,         ! ICCG/PICCG iterative solver 
+  accept=0.001,      ! Iteration convergence criterion   
+  maxitn={maxitn},        ! Maximum number of iterations for finite difference solver 
+  fillratio=1.5,     ! ratio between longest dimension of rectangular finite-difference grid and that of the solute    
+  space=0.5,         ! Grid spacing for finite-difference solver 
+  nfocus={nfocus},          ! Number of successive FD calculations for electrostatic focusing  
+  fscale=8,          ! Ratio between coarse and fine grid spacings in electrostatic focussing 
+  npbgrid=1,         ! Frequency for regenerating finite-difference grid 
+  bcopt={bcopt},           ! Boundary grid potentials computed using all grid charges
+  eneopt={eneopt},          ! Reaction field energy computed using dielectric boundary surface charges 
+  frcopt=2,          ! reaction field forces and dielectric boundary forces computed with dielectric boundary surface polarized charges 
+  scalec=0,          ! Dielectric boundary surface charges are not scaled before computing reaction field energy and forces
+  cutfd=5,           ! Atom-based cutoff distance to remove short-range finite-difference interactions and to add pairwise charge-based interactions
+  cutnb=0,           ! Atom-based cutoff distance for van der Waals interactions and pairwise Coulombic interactions when eneopt=2   
+  !phiout=1,         ! Output spatial distribution of electrostatic potential f
+  !phiform=2,        ! DX format of the electrostatic potential file for VMD
+  !outlvlset=true,   ! Output total level set, used in locating interfaces between regions of differing dielectric constant
+  !outmlvlset=true,  ! Output membrane level set, used in locating interfaces between regions of differing dielectric constant
+  !npbverb=1,        ! Output verbosity; 1 is verbose 
+  !isurfchg=1,       ! Save surface changes to a file
+ /
+            """, file=open(f"pbsa-{HEM[idx][0]}_epsin{epsin[idx]}_epsout{epsout[idx]}.key", 'w'))
+
+        if (os.path.isfile("r%0d.prmtop" %(HEM[idx][0])) == False):
+            print(f"""
+parm StrucForPBSA.RefState.prmtop
+
+netcharge :{HEM[idx][0]},{HEM[idx][1]},{HEM[idx][2]}
+change CHARGE :{HEM[idx][0]}&@FE         0.4223
+change CHARGE :{HEM[idx][0]}&@NA         0.1973
+change CHARGE :{HEM[idx][0]}&@C1A       -0.3489
+change CHARGE :{HEM[idx][0]}&@C2A        0.2187
+change CHARGE :{HEM[idx][0]}&@C3A       -0.0877
+change CHARGE :{HEM[idx][0]}&@CMA       -0.0598
+change CHARGE :{HEM[idx][0]}&@HMA1       0.0703
+change CHARGE :{HEM[idx][0]}&@HMA2       0.0281
+change CHARGE :{HEM[idx][0]}&@HMA3       0.0872
+change CHARGE :{HEM[idx][0]}&@C4A       -0.2107
+change CHARGE :{HEM[idx][0]}&@CHB       -0.1614
+change CHARGE :{HEM[idx][0]}&@HHB        0.3441
+change CHARGE :{HEM[idx][0]}&@C1B       -0.1858
+change CHARGE :{HEM[idx][0]}&@NB         0.1413
+change CHARGE :{HEM[idx][0]}&@C2B       -0.0884   
+change CHARGE :{HEM[idx][0]}&@CMB        0.0466
+change CHARGE :{HEM[idx][0]}&@HMB1      -0.0146
+change CHARGE :{HEM[idx][0]}&@HMB2       0.0447
+change CHARGE :{HEM[idx][0]}&@HMB3       0.0352
+change CHARGE :{HEM[idx][0]}&@C3B        0.0348
+change CHARGE :{HEM[idx][0]}&@CAB       -0.2072
+change CHARGE :{HEM[idx][0]}&@HAB        0.1898
+change CHARGE :{HEM[idx][0]}&@CBB       -0.4301
+change CHARGE :{HEM[idx][0]}&@HBB1       0.2165
+change CHARGE :{HEM[idx][0]}&@HBB2       0.1971
+change CHARGE :{HEM[idx][0]}&@C4B       -0.0142
+change CHARGE :{HEM[idx][0]}&@CHC       -0.2576
+change CHARGE :{HEM[idx][0]}&@HHC        0.2520
+change CHARGE :{HEM[idx][0]}&@C1C        0.0528
+change CHARGE :{HEM[idx][0]}&@NC         0.1307
+change CHARGE :{HEM[idx][0]}&@C2C        0.0116
+change CHARGE :{HEM[idx][0]}&@CMC       -0.1501
+change CHARGE :{HEM[idx][0]}&@HMC1       0.0991
+change CHARGE :{HEM[idx][0]}&@HMC2       0.1038
+change CHARGE :{HEM[idx][0]}&@HMC3       0.0489
+change CHARGE :{HEM[idx][0]}&@C3C        0.0046
+change CHARGE :{HEM[idx][0]}&@CAC       -0.0156
+change CHARGE :{HEM[idx][0]}&@HAC        0.1293
+change CHARGE :{HEM[idx][0]}&@CBC       -0.5384
+change CHARGE :{HEM[idx][0]}&@HBC1       0.2611
+change CHARGE :{HEM[idx][0]}&@HBC2       0.2581
+change CHARGE :{HEM[idx][0]}&@C4C       -0.2427
+change CHARGE :{HEM[idx][0]}&@CHD       -0.2138
+change CHARGE :{HEM[idx][0]}&@HHD        0.3122
+change CHARGE :{HEM[idx][0]}&@C1D       -0.0975
+change CHARGE :{HEM[idx][0]}&@ND         0.1255
+change CHARGE :{HEM[idx][0]}&@C2D       -0.0861
+change CHARGE :{HEM[idx][0]}&@CMD        0.0005
+change CHARGE :{HEM[idx][0]}&@HMD1       0.0098
+change CHARGE :{HEM[idx][0]}&@HMD2       0.0805
+change CHARGE :{HEM[idx][0]}&@HMD3       0.0078
+change CHARGE :{HEM[idx][0]}&@C3D       -0.1965
+change CHARGE :{HEM[idx][0]}&@C4D        0.0236
+change CHARGE :{HEM[idx][0]}&@CHA       -0.1216
+change CHARGE :{HEM[idx][0]}&@HHA        0.3063
+change CHARGE :{HEM[idx][1]}&@CB         0.0426
+change CHARGE :{HEM[idx][1]}&@HB2        0.0349
+change CHARGE :{HEM[idx][1]}&@HB3        0.0349
+change CHARGE :{HEM[idx][1]}&@CG         0.0408
+change CHARGE :{HEM[idx][1]}&@ND1       -0.1881
+change CHARGE :{HEM[idx][1]}&@HD1        0.3920
+change CHARGE :{HEM[idx][1]}&@CE1       -0.1901
+change CHARGE :{HEM[idx][1]}&@HE1        0.2191
+change CHARGE :{HEM[idx][1]}&@NE2       -0.0847
+change CHARGE :{HEM[idx][1]}&@CD2       -0.3012
+change CHARGE :{HEM[idx][1]}&@HD2        0.2011
+change CHARGE :{HEM[idx][2]}&@CB        -0.0373
+change CHARGE :{HEM[idx][2]}&@HB2        0.0585
+change CHARGE :{HEM[idx][2]}&@HB3        0.0585
+change CHARGE :{HEM[idx][2]}&@CG        -0.0477
+change CHARGE :{HEM[idx][2]}&@ND1       -0.0525
+change CHARGE :{HEM[idx][2]}&@HD1        0.3710
+change CHARGE :{HEM[idx][2]}&@CE1       -0.3032
+change CHARGE :{HEM[idx][2]}&@HE1        0.2740
+change CHARGE :{HEM[idx][2]}&@NE2       -0.1611
+change CHARGE :{HEM[idx][2]}&@CD2       -0.2274
+change CHARGE :{HEM[idx][2]}&@HD2        0.2297
+change CHARGE :{HEM[idx][0]}&@CAA        0.1105
+change CHARGE :{HEM[idx][0]}&@HAA1       0.0269
+change CHARGE :{HEM[idx][0]}&@HAA2      -0.0203
+change CHARGE :{HEM[idx][0]}&@CBA       -0.0733
+change CHARGE :{HEM[idx][0]}&@HBA1       0.0006
+change CHARGE :{HEM[idx][0]}&@HBA2       0.0585
+change CHARGE :{HEM[idx][0]}&@CGA        0.5918
+change CHARGE :{HEM[idx][0]}&@O1A       -0.6537
+change CHARGE :{HEM[idx][0]}&@O2A       -0.6853
+change CHARGE :{HEM[idx][0]}&@CAD       -0.0291
+change CHARGE :{HEM[idx][0]}&@HAD1       0.0078
+change CHARGE :{HEM[idx][0]}&@HAD2       0.0658
+change CHARGE :{HEM[idx][0]}&@CBD        0.2827
+change CHARGE :{HEM[idx][0]}&@HBD1      -0.0293
+change CHARGE :{HEM[idx][0]}&@HBD2      -0.0436
+change CHARGE :{HEM[idx][0]}&@CGD        0.4783
+change CHARGE :{HEM[idx][0]}&@O1D       -0.6025
+change CHARGE :{HEM[idx][0]}&@O2D       -0.6098
+netcharge :{HEM[idx][0]},{HEM[idx][1]},{HEM[idx][2]}
+outparm r{HEM[idx][0]}.prmtop
+""", file=open("r"+str(HEM[idx][0])+".inp", 'w'))
+
+            print("\n Generating topology for rHEM-%0d ..." %(HEM[idx][0]))
+            subprocess.run("parmed -i "+str("r")+str(HEM[idx][0])+".inp > "+str("r")+str(HEM[idx][0])+".log", shell=True)
+
+        if (os.path.isfile(f"pbsa_r{HEM[idx][0]}_epsin{epsin[idx]}_epsout{epsout[idx]}.out") == True):
+            print(f""" 
+ Found pbsa_r{HEM[idx][0]}_epsin{epsin[idx]}_epsout{epsout[idx]}.out from a prior execution.
+ This prior output will be used for the analysis.""")
+        else: 
+            if (CompChoice == "SERIAL") or (CompChoice == "Serial") or (CompChoice == "serial") or (CompChoice == "S") or (CompChoice == "s"):
+                print(" Running PBSA calculation for red. HEM-%0d ..." %(HEM[idx][0]))
+                subprocess.run(f"pbsa -O -i pbsa-{HEM[idx][0]}_epsin{epsin[idx]}_epsout{epsout[idx]}.key -o pbsa_r{HEM[idx][0]}_epsin{epsin[idx]}_epsout{epsout[idx]}.out -p r{HEM[idx][0]}.prmtop -c StrucForPBSA.rst7", shell=True)
+            if (CompChoice == "PARALLEL") or (CompChoice == "Parallel") or (CompChoice == "parallel") or (CompChoice == "P") or (CompChoice == "p"):
+                command[idxc] = f"pbsa -O -i pbsa-{HEM[idx][0]}_epsin{epsin[idx]}_epsout{epsout[idx]}.key -o pbsa_r{HEM[idx][0]}_epsin{epsin[idx]}_epsout{epsout[idx]}.out -p r{HEM[idx][0]}.prmtop -c StrucForPBSA.rst7"
+                idxc += 1
+            
+        if (os.path.isfile("o%0d.prmtop" %(HEM[idx][0])) == False):
+            print(f"""
+parm StrucForPBSA.RefState.prmtop
+
+netcharge :{HEM[idx][0]},{HEM[idx][1]},{HEM[idx][2]}
+change CHARGE :{HEM[idx][0]}&@FE         0.6083
+change CHARGE :{HEM[idx][0]}&@NA         0.1780
+change CHARGE :{HEM[idx][0]}&@C1A       -0.2990
+change CHARGE :{HEM[idx][0]}&@C2A        0.2176
+change CHARGE :{HEM[idx][0]}&@C3A       -0.0578
+change CHARGE :{HEM[idx][0]}&@CMA       -0.0653
+change CHARGE :{HEM[idx][0]}&@HMA1       0.0838
+change CHARGE :{HEM[idx][0]}&@HMA2       0.0416
+change CHARGE :{HEM[idx][0]}&@HMA3       0.1007
+change CHARGE :{HEM[idx][0]}&@C4A       -0.2008
+change CHARGE :{HEM[idx][0]}&@CHB       -0.1385
+change CHARGE :{HEM[idx][0]}&@HHB        0.3521
+change CHARGE :{HEM[idx][0]}&@C1B       -0.1639
+change CHARGE :{HEM[idx][0]}&@NB         0.1343
+change CHARGE :{HEM[idx][0]}&@C2B       -0.1095
+change CHARGE :{HEM[idx][0]}&@CMB        0.0161
+change CHARGE :{HEM[idx][0]}&@HMB1       0.0095
+change CHARGE :{HEM[idx][0]}&@HMB2       0.0688
+change CHARGE :{HEM[idx][0]}&@HMB3       0.0593
+change CHARGE :{HEM[idx][0]}&@C3B        0.1107
+change CHARGE :{HEM[idx][0]}&@CAB       -0.2074
+change CHARGE :{HEM[idx][0]}&@HAB        0.1943
+change CHARGE :{HEM[idx][0]}&@CBB       -0.4054
+change CHARGE :{HEM[idx][0]}&@HBB1       0.2192
+change CHARGE :{HEM[idx][0]}&@HBB2       0.1998
+change CHARGE :{HEM[idx][0]}&@C4B       -0.0043
+change CHARGE :{HEM[idx][0]}&@CHC       -0.2657
+change CHARGE :{HEM[idx][0]}&@HHC        0.2630
+change CHARGE :{HEM[idx][0]}&@C1C        0.1417
+change CHARGE :{HEM[idx][0]}&@NC         0.0897
+change CHARGE :{HEM[idx][0]}&@C2C       -0.0225
+change CHARGE :{HEM[idx][0]}&@CMC       -0.1841
+change CHARGE :{HEM[idx][0]}&@HMC1       0.1221
+change CHARGE :{HEM[idx][0]}&@HMC2       0.1268
+change CHARGE :{HEM[idx][0]}&@HMC3       0.0719
+change CHARGE :{HEM[idx][0]}&@C3C        0.0485
+change CHARGE :{HEM[idx][0]}&@CAC        0.0012
+change CHARGE :{HEM[idx][0]}&@HAC        0.1508
+change CHARGE :{HEM[idx][0]}&@CBC       -0.5097
+change CHARGE :{HEM[idx][0]}&@HBC1       0.2648
+change CHARGE :{HEM[idx][0]}&@HBC2       0.2618
+change CHARGE :{HEM[idx][0]}&@C4C       -0.2418
+change CHARGE :{HEM[idx][0]}&@CHD       -0.1909
+change CHARGE :{HEM[idx][0]}&@HHD        0.3192
+change CHARGE :{HEM[idx][0]}&@C1D       -0.0856
+change CHARGE :{HEM[idx][0]}&@ND         0.1145
+change CHARGE :{HEM[idx][0]}&@C2D       -0.0592
+change CHARGE :{HEM[idx][0]}&@CMD       -0.0045
+change CHARGE :{HEM[idx][0]}&@HMD1       0.0235
+change CHARGE :{HEM[idx][0]}&@HMD2       0.0942
+change CHARGE :{HEM[idx][0]}&@HMD3       0.0215
+change CHARGE :{HEM[idx][0]}&@C3D       -0.1936
+change CHARGE :{HEM[idx][0]}&@C4D        0.0685
+change CHARGE :{HEM[idx][0]}&@CHA       -0.1387
+change CHARGE :{HEM[idx][0]}&@HHA        0.3203
+change CHARGE :{HEM[idx][1]}&@CB         0.0590
+change CHARGE :{HEM[idx][1]}&@HB2        0.0431
+change CHARGE :{HEM[idx][1]}&@HB3        0.0431
+change CHARGE :{HEM[idx][1]}&@CG         0.0368
+change CHARGE :{HEM[idx][1]}&@ND1       -0.1361
+change CHARGE :{HEM[idx][1]}&@HD1        0.4020
+change CHARGE :{HEM[idx][1]}&@CE1       -0.1891
+change CHARGE :{HEM[idx][1]}&@HE1        0.2281
+change CHARGE :{HEM[idx][1]}&@NE2       -0.0977
+change CHARGE :{HEM[idx][1]}&@CD2       -0.2862
+change CHARGE :{HEM[idx][1]}&@HD2        0.2051
+change CHARGE :{HEM[idx][2]}&@CB        -0.0209
+change CHARGE :{HEM[idx][2]}&@HB2        0.0667
+change CHARGE :{HEM[idx][2]}&@HB3        0.0667
+change CHARGE :{HEM[idx][2]}&@CG        -0.0517
+change CHARGE :{HEM[idx][2]}&@ND1       -0.0005
+change CHARGE :{HEM[idx][2]}&@HD1        0.3810
+change CHARGE :{HEM[idx][2]}&@CE1       -0.3022
+change CHARGE :{HEM[idx][2]}&@HE1        0.2830
+change CHARGE :{HEM[idx][2]}&@NE2       -0.1741
+change CHARGE :{HEM[idx][2]}&@CD2       -0.2124
+change CHARGE :{HEM[idx][2]}&@HD2        0.2337
+change CHARGE :{HEM[idx][0]}&@CAA        0.1105
+change CHARGE :{HEM[idx][0]}&@HAA1       0.0269
+change CHARGE :{HEM[idx][0]}&@HAA2      -0.0203
+change CHARGE :{HEM[idx][0]}&@CBA       -0.0733
+change CHARGE :{HEM[idx][0]}&@HBA1       0.0006
+change CHARGE :{HEM[idx][0]}&@HBA2       0.0585
+change CHARGE :{HEM[idx][0]}&@CGA        0.5918
+change CHARGE :{HEM[idx][0]}&@O1A       -0.6537
+change CHARGE :{HEM[idx][0]}&@O2A       -0.6853
+change CHARGE :{HEM[idx][0]}&@CAD       -0.0291
+change CHARGE :{HEM[idx][0]}&@HAD1       0.0078
+change CHARGE :{HEM[idx][0]}&@HAD2       0.0658
+change CHARGE :{HEM[idx][0]}&@CBD        0.2827
+change CHARGE :{HEM[idx][0]}&@HBD1      -0.0293
+change CHARGE :{HEM[idx][0]}&@HBD2      -0.0436
+change CHARGE :{HEM[idx][0]}&@CGD        0.4783
+change CHARGE :{HEM[idx][0]}&@O1D       -0.6025
+change CHARGE :{HEM[idx][0]}&@O2D       -0.6098
+netcharge :{HEM[idx][0]},{HEM[idx][1]},{HEM[idx][2]}
+outparm o{HEM[idx][0]}.prmtop
+""", file=open("o"+str(HEM[idx][0])+".inp", 'w'))
+
+            print("\n Generating topology for oHEM-%0d ..." %(HEM[idx][0]))
+            subprocess.run("parmed -i "+str("o")+str(HEM[idx][0])+".inp > "+str("o")+str(HEM[idx][0])+".log", shell=True)
+
+        if (os.path.isfile("pbsa_o{HEM[idx][0]}_epsin{epsin[idx]}_epsout{epsout[idx]}.out") == True):
+            print(""" 
+ Found pbsa_o{HEM[idx][0]}_epsin{epsin[idx]}_epsout{epsout[idx]}.out from a prior execution.
+ This prior output will be used for the analysis.""")
+        else: 
+            if (CompChoice == "SERIAL") or (CompChoice == "Serial") or (CompChoice == "serial") or (CompChoice == "S") or (CompChoice == "s"):
+                print(" Running PBSA calculation for ox. HEM-%0d ..." %(HEM[idx][0]))
+                subprocess.run(f"pbsa -O -i pbsa-{HEM[idx][0]}_epsin{epsin[idx]}_epsout{epsout[idx]}.key -o pbsa_o{HEM[idx][0]}_epsin{epsin[idx]}_epsout{epsout[idx]}.out -p o{HEM[idx][0]}.prmtop -c StrucForPBSA.rst7", shell=True)
+            if (CompChoice == "parallel") or (CompChoice == "p") or (CompChoice == "P"):
+                command[idxc] = f"pbsa -O -i pbsa-{HEM[idx][0]}_epsin{epsin[idx]}_epsout{epsout[idx]}.key -o pbsa_o{HEM[idx][0]}_epsin{epsin[idx]}_epsout{epsout[idx]}.out -p o{HEM[idx][0]}.prmtop -c StrucForPBSA.rst7"
+                idxc += 1
+
+    if (idxc != 0):
+        print("\n Submitting "+str(len(command))+" PBSA calculations in parallel")
+
+        procs = [ subprocess.Popen(i, shell=True) for i in command ]
+        for p in procs:
+            p.wait()
+            print("  Finished: "+str(p))
+
+    DEtot = [0]*(len(HEM))
+    DEelec = [0]*(len(HEM))
+    DG = [0]*(len(HEM)-1)
+    for idx in range(len(HEM)):
+
+        idx1 = 0; idx2 = 0;
+        word1 = 'Etot'; word2 = 'EELEC'
+        try:
+            with open(f"pbsa_o{HEM[idx][0]}_epsin{epsin[idx]}_epsout{epsout[idx]}.out", 'r', encoding="utf-8") as fp:
+                lines = fp.readlines()
+
+                for line in lines:
+
+                    if (line.find(word1) != -1) and (idx1 == 0):
+                        EtotOx = float(line.strip().split()[2]) * 0.043 
+                        idx1 += 1
+
+                    if (line.find(word2) != -1) and (idx2 == 0):
+                        EelecOx = float(line.strip().split()[2]) * 0.043
+                        idx2 += 1
+        except UnicodeDecodeError:
+            with open(f"pbsa_o{HEM[idx][0]}_epsin{epsin[idx]}_epsout{epsout[idx]}.out", 'r', encoding="latin-1") as fp:
+                lines = fp.readlines()
+
+                for line in lines:
+
+                    if (line.find(word1) != -1) and (idx1 == 0):
+                        EtotOx = float(line.strip().split()[2]) * 0.043 
+                        idx1 += 1
+
+                    if (line.find(word2) != -1) and (idx2 == 0):
+                        EelecOx = float(line.strip().split()[2]) * 0.043
+                        idx2 += 1
+
+        idx3 = 0; idx4 = 0;
+        try:
+            with open(f"pbsa_r{HEM[idx][0]}_epsin{epsin[idx]}_epsout{epsout[idx]}.out", 'r', encoding="utf-8") as fp:
+                lines = fp.readlines()
+
+                for line in lines:
+                    if (line.find(word1) != -1) and (idx3 == 0):
+                        EtotRed = float(line.strip().split()[2]) * 0.043
+                        idx3 += 1
+
+                    if (line.find(word2) != -1) and (idx4 == 0):
+                        EelecRed = float(line.strip().split()[2]) * 0.043
+                        idx4 += 1
+
+        except UnicodeDecodeError:
+            with open(f"pbsa_r{HEM[idx][0]}_epsin{epsin[idx]}_epsout{epsout[idx]}.out", 'r', encoding="latin-1") as fp:
+                lines = fp.readlines()
+
+                for line in lines:
+                    if (line.find(word1) != -1) and (idx3 == 0):
+                        EtotRed = float(line.strip().split()[2]) * 0.043
+                        idx3 += 1
+
+                    if (line.find(word2) != -1) and (idx4 == 0):
+                        EelecRed = float(line.strip().split()[2]) * 0.043
+                        idx4 += 1
+
+        DEtot[idx] = (EtotOx - EtotRed) 
+        DEelec[idx] = (EelecOx - EelecRed) 
+
+        if (idx == 0):
+            print("\n Result:")
+
+        print("""  step=%0d HEM-%0d EtotOx=%.3f eV EtotRed=%.3f eV DEtot=%.3f eV EelecOx=%.3f eV EelecRed=%.3f eV DEelec=%.3f eV""" %(idx, HEM[idx][0], EtotOx, EtotRed, DEtot[idx], EelecOx, EelecRed, DEelec[idx]))
+
+    for idx in range(len(HEM)-1):
+        DG[idx] = -1 * ((-1 * DEtot[idx]) + (DEtot[idx+1])) 
+
+        if (idx == 0):
+            print("(HEM-%0d = %.3f eV) -> (HEM-%0d = %.3f eV); DG = %10.3f eV" %(HEM[idx][0],  DEtot[idx], HEM[idx+1][0], DEtot[idx+1], DG[idx]), file=open('DG.txt', 'w'))
+        else:
+            print("(HEM-%0d = %.3f eV) -> (HEM-%0d = %.3f eV); DG = %10.3f eV" %(HEM[idx][0],  DEtot[idx], HEM[idx+1][0], DEtot[idx+1], DG[idx]), file=open('DG.txt', 'a'))
+
+    return DG
+
+################################################################################################################################################
+
+################################################################################################################################################
+
+def PairedChargeAssignment_HemeB(Output, HEM, i, j, k, l):
+    if (os.path.isfile(str(k)+str(HEM[i][0])+"-"+str(l)+str(HEM[j][0])+".inp") == True):
+
+        print(f"\n Generating topology for {k}{HEM[i][0]}-{l}{HEM[j][0]} ...")
+        subprocess.run("parmed -i "+str(k)+str(HEM[i][0])+"-"+str(l)+str(HEM[j][0])+".inp > "+str(k)+str(HEM[i][0])+"-"+str(l)+str(HEM[j][0])+".log", shell=True)
+
+    elif (os.path.isfile(str(k)+str(HEM[i][0])+"-"+str(l)+str(HEM[j][0])+".inp") == False):
+        print(f"""
+parm StrucForPBSA.RefState.prmtop""", file=open(str(k)+str(HEM[i][0])+"-"+str(l)+str(HEM[j][0])+".inp", 'w'))
+
+        if (k == "o"):
+            print(f"""
+netcharge :{HEM[i][0]},{HEM[i][1]},{HEM[i][2]}
+change CHARGE :{HEM[i][0]}&@FE         0.6083
+change CHARGE :{HEM[i][0]}&@NA         0.1780
+change CHARGE :{HEM[i][0]}&@C1A       -0.2990
+change CHARGE :{HEM[i][0]}&@C2A        0.2176
+change CHARGE :{HEM[i][0]}&@C3A       -0.0578
+change CHARGE :{HEM[i][0]}&@CMA       -0.0653
+change CHARGE :{HEM[i][0]}&@HMA1       0.0838
+change CHARGE :{HEM[i][0]}&@HMA2       0.0416
+change CHARGE :{HEM[i][0]}&@HMA3       0.1007
+change CHARGE :{HEM[i][0]}&@C4A       -0.2008
+change CHARGE :{HEM[i][0]}&@CHB       -0.1385
+change CHARGE :{HEM[i][0]}&@HHB        0.3521
+change CHARGE :{HEM[i][0]}&@C1B       -0.1639
+change CHARGE :{HEM[i][0]}&@NB         0.1343
+change CHARGE :{HEM[i][0]}&@C2B       -0.1095
+change CHARGE :{HEM[i][0]}&@CMB        0.0161
+change CHARGE :{HEM[i][0]}&@HMB1       0.0095
+change CHARGE :{HEM[i][0]}&@HMB2       0.0688
+change CHARGE :{HEM[i][0]}&@HMB3       0.0593
+change CHARGE :{HEM[i][0]}&@C3B        0.1107
+change CHARGE :{HEM[i][0]}&@CAB       -0.2074
+change CHARGE :{HEM[i][0]}&@HAB        0.1943
+change CHARGE :{HEM[i][0]}&@CBB       -0.4054
+change CHARGE :{HEM[i][0]}&@HBB1       0.2192
+change CHARGE :{HEM[i][0]}&@HBB2       0.1998
+change CHARGE :{HEM[i][0]}&@C4B       -0.0043
+change CHARGE :{HEM[i][0]}&@CHC       -0.2657
+change CHARGE :{HEM[i][0]}&@HHC        0.2630
+change CHARGE :{HEM[i][0]}&@C1C        0.1417
+change CHARGE :{HEM[i][0]}&@NC         0.0897
+change CHARGE :{HEM[i][0]}&@C2C       -0.0225
+change CHARGE :{HEM[i][0]}&@CMC       -0.1841
+change CHARGE :{HEM[i][0]}&@HMC1       0.1221
+change CHARGE :{HEM[i][0]}&@HMC2       0.1268
+change CHARGE :{HEM[i][0]}&@HMC3       0.0719
+change CHARGE :{HEM[i][0]}&@C3C        0.0485
+change CHARGE :{HEM[i][0]}&@CAC        0.0012
+change CHARGE :{HEM[i][0]}&@HAC        0.1508
+change CHARGE :{HEM[i][0]}&@CBC       -0.5097
+change CHARGE :{HEM[i][0]}&@HBC1       0.2648
+change CHARGE :{HEM[i][0]}&@HBC2       0.2618
+change CHARGE :{HEM[i][0]}&@C4C       -0.2418
+change CHARGE :{HEM[i][0]}&@CHD       -0.1909
+change CHARGE :{HEM[i][0]}&@HHD        0.3192
+change CHARGE :{HEM[i][0]}&@C1D       -0.0856
+change CHARGE :{HEM[i][0]}&@ND         0.1145
+change CHARGE :{HEM[i][0]}&@C2D       -0.0592
+change CHARGE :{HEM[i][0]}&@CMD       -0.0045
+change CHARGE :{HEM[i][0]}&@HMD1       0.0235
+change CHARGE :{HEM[i][0]}&@HMD2       0.0942
+change CHARGE :{HEM[i][0]}&@HMD3       0.0215
+change CHARGE :{HEM[i][0]}&@C3D       -0.1936
+change CHARGE :{HEM[i][0]}&@C4D        0.0685
+change CHARGE :{HEM[i][0]}&@CHA       -0.1387
+change CHARGE :{HEM[i][0]}&@HHA        0.3203
+change CHARGE :{HEM[i][1]}&@CB         0.0590
+change CHARGE :{HEM[i][1]}&@HB2        0.0431
+change CHARGE :{HEM[i][1]}&@HB3        0.0431
+change CHARGE :{HEM[i][1]}&@CG         0.0368
+change CHARGE :{HEM[i][1]}&@ND1       -0.1361
+change CHARGE :{HEM[i][1]}&@HD1        0.4020
+change CHARGE :{HEM[i][1]}&@CE1       -0.1891
+change CHARGE :{HEM[i][1]}&@HE1        0.2281
+change CHARGE :{HEM[i][1]}&@NE2       -0.0977
+change CHARGE :{HEM[i][1]}&@CD2       -0.2862
+change CHARGE :{HEM[i][1]}&@HD2        0.2051
+change CHARGE :{HEM[i][2]}&@CB        -0.0209
+change CHARGE :{HEM[i][2]}&@HB2        0.0667
+change CHARGE :{HEM[i][2]}&@HB3        0.0667
+change CHARGE :{HEM[i][2]}&@CG        -0.0517
+change CHARGE :{HEM[i][2]}&@ND1       -0.0005
+change CHARGE :{HEM[i][2]}&@HD1        0.3810
+change CHARGE :{HEM[i][2]}&@CE1       -0.3022
+change CHARGE :{HEM[i][2]}&@HE1        0.2830
+change CHARGE :{HEM[i][2]}&@NE2       -0.1741
+change CHARGE :{HEM[i][2]}&@CD2       -0.2124
+change CHARGE :{HEM[i][2]}&@HD2        0.2337
+change CHARGE :{HEM[i][0]}&@CAA        0.1105
+change CHARGE :{HEM[i][0]}&@HAA1       0.0269
+change CHARGE :{HEM[i][0]}&@HAA2      -0.0203
+change CHARGE :{HEM[i][0]}&@CBA       -0.0733
+change CHARGE :{HEM[i][0]}&@HBA1       0.0006
+change CHARGE :{HEM[i][0]}&@HBA2       0.0585
+change CHARGE :{HEM[i][0]}&@CGA        0.5918
+change CHARGE :{HEM[i][0]}&@O1A       -0.6537
+change CHARGE :{HEM[i][0]}&@O2A       -0.6853
+change CHARGE :{HEM[i][0]}&@CAD       -0.0291
+change CHARGE :{HEM[i][0]}&@HAD1       0.0078
+change CHARGE :{HEM[i][0]}&@HAD2       0.0658
+change CHARGE :{HEM[i][0]}&@CBD        0.2827
+change CHARGE :{HEM[i][0]}&@HBD1      -0.0293
+change CHARGE :{HEM[i][0]}&@HBD2      -0.0436
+change CHARGE :{HEM[i][0]}&@CGD        0.4783
+change CHARGE :{HEM[i][0]}&@O1D       -0.6025
+change CHARGE :{HEM[i][0]}&@O2D       -0.6098
+netcharge :{HEM[i][0]},{HEM[i][1]},{HEM[i][2]}""", file=open(str(k)+str(HEM[i][0])+"-"+str(l)+str(HEM[j][0])+".inp", 'a'))
+
+        if (k == "r"):
+            print(f"""
+netcharge :{HEM[i][0]},{HEM[i][1]},{HEM[i][2]}
+change CHARGE :{HEM[i][0]}&@FE         0.4223
+change CHARGE :{HEM[i][0]}&@NA         0.1973
+change CHARGE :{HEM[i][0]}&@C1A       -0.3489
+change CHARGE :{HEM[i][0]}&@C2A        0.2187
+change CHARGE :{HEM[i][0]}&@C3A       -0.0877
+change CHARGE :{HEM[i][0]}&@CMA       -0.0598
+change CHARGE :{HEM[i][0]}&@HMA1       0.0703
+change CHARGE :{HEM[i][0]}&@HMA2       0.0281
+change CHARGE :{HEM[i][0]}&@HMA3       0.0872
+change CHARGE :{HEM[i][0]}&@C4A       -0.2107
+change CHARGE :{HEM[i][0]}&@CHB       -0.1614
+change CHARGE :{HEM[i][0]}&@HHB        0.3441
+change CHARGE :{HEM[i][0]}&@C1B       -0.1858
+change CHARGE :{HEM[i][0]}&@NB         0.1413
+change CHARGE :{HEM[i][0]}&@C2B       -0.0884   
+change CHARGE :{HEM[i][0]}&@CMB        0.0466
+change CHARGE :{HEM[i][0]}&@HMB1      -0.0146
+change CHARGE :{HEM[i][0]}&@HMB2       0.0447
+change CHARGE :{HEM[i][0]}&@HMB3       0.0352
+change CHARGE :{HEM[i][0]}&@C3B        0.0348
+change CHARGE :{HEM[i][0]}&@CAB       -0.2072
+change CHARGE :{HEM[i][0]}&@HAB        0.1898
+change CHARGE :{HEM[i][0]}&@CBB       -0.4301
+change CHARGE :{HEM[i][0]}&@HBB1       0.2165
+change CHARGE :{HEM[i][0]}&@HBB2       0.1971
+change CHARGE :{HEM[i][0]}&@C4B       -0.0142
+change CHARGE :{HEM[i][0]}&@CHC       -0.2576
+change CHARGE :{HEM[i][0]}&@HHC        0.2520
+change CHARGE :{HEM[i][0]}&@C1C        0.0528
+change CHARGE :{HEM[i][0]}&@NC         0.1307
+change CHARGE :{HEM[i][0]}&@C2C        0.0116
+change CHARGE :{HEM[i][0]}&@CMC       -0.1501
+change CHARGE :{HEM[i][0]}&@HMC1       0.0991
+change CHARGE :{HEM[i][0]}&@HMC2       0.1038
+change CHARGE :{HEM[i][0]}&@HMC3       0.0489
+change CHARGE :{HEM[i][0]}&@C3C        0.0046
+change CHARGE :{HEM[i][0]}&@CAC       -0.0156
+change CHARGE :{HEM[i][0]}&@HAC        0.1293
+change CHARGE :{HEM[i][0]}&@CBC       -0.5384
+change CHARGE :{HEM[i][0]}&@HBC1       0.2611
+change CHARGE :{HEM[i][0]}&@HBC2       0.2581
+change CHARGE :{HEM[i][0]}&@C4C       -0.2427
+change CHARGE :{HEM[i][0]}&@CHD       -0.2138
+change CHARGE :{HEM[i][0]}&@HHD        0.3122
+change CHARGE :{HEM[i][0]}&@C1D       -0.0975
+change CHARGE :{HEM[i][0]}&@ND         0.1255
+change CHARGE :{HEM[i][0]}&@C2D       -0.0861
+change CHARGE :{HEM[i][0]}&@CMD        0.0005
+change CHARGE :{HEM[i][0]}&@HMD1       0.0098
+change CHARGE :{HEM[i][0]}&@HMD2       0.0805
+change CHARGE :{HEM[i][0]}&@HMD3       0.0078
+change CHARGE :{HEM[i][0]}&@C3D       -0.1965
+change CHARGE :{HEM[i][0]}&@C4D        0.0236
+change CHARGE :{HEM[i][0]}&@CHA       -0.1216
+change CHARGE :{HEM[i][0]}&@HHA        0.3063
+change CHARGE :{HEM[i][1]}&@CB         0.0426
+change CHARGE :{HEM[i][1]}&@HB2        0.0349
+change CHARGE :{HEM[i][1]}&@HB3        0.0349
+change CHARGE :{HEM[i][1]}&@CG         0.0408
+change CHARGE :{HEM[i][1]}&@ND1       -0.1881
+change CHARGE :{HEM[i][1]}&@HD1        0.3920
+change CHARGE :{HEM[i][1]}&@CE1       -0.1901
+change CHARGE :{HEM[i][1]}&@HE1        0.2191
+change CHARGE :{HEM[i][1]}&@NE2       -0.0847
+change CHARGE :{HEM[i][1]}&@CD2       -0.3012
+change CHARGE :{HEM[i][1]}&@HD2        0.2011
+change CHARGE :{HEM[i][2]}&@CB        -0.0373
+change CHARGE :{HEM[i][2]}&@HB2        0.0585
+change CHARGE :{HEM[i][2]}&@HB3        0.0585
+change CHARGE :{HEM[i][2]}&@CG        -0.0477
+change CHARGE :{HEM[i][2]}&@ND1       -0.0525
+change CHARGE :{HEM[i][2]}&@HD1        0.3710
+change CHARGE :{HEM[i][2]}&@CE1       -0.3032
+change CHARGE :{HEM[i][2]}&@HE1        0.2740
+change CHARGE :{HEM[i][2]}&@NE2       -0.1611
+change CHARGE :{HEM[i][2]}&@CD2       -0.2274
+change CHARGE :{HEM[i][2]}&@HD2        0.2297
+change CHARGE :{HEM[i][0]}&@CAA        0.1105
+change CHARGE :{HEM[i][0]}&@HAA1       0.0269
+change CHARGE :{HEM[i][0]}&@HAA2      -0.0203
+change CHARGE :{HEM[i][0]}&@CBA       -0.0733
+change CHARGE :{HEM[i][0]}&@HBA1       0.0006
+change CHARGE :{HEM[i][0]}&@HBA2       0.0585
+change CHARGE :{HEM[i][0]}&@CGA        0.5918
+change CHARGE :{HEM[i][0]}&@O1A       -0.6537
+change CHARGE :{HEM[i][0]}&@O2A       -0.6853
+change CHARGE :{HEM[i][0]}&@CAD       -0.0291
+change CHARGE :{HEM[i][0]}&@HAD1       0.0078
+change CHARGE :{HEM[i][0]}&@HAD2       0.0658
+change CHARGE :{HEM[i][0]}&@CBD        0.2827
+change CHARGE :{HEM[i][0]}&@HBD1      -0.0293
+change CHARGE :{HEM[i][0]}&@HBD2      -0.0436
+change CHARGE :{HEM[i][0]}&@CGD        0.4783
+change CHARGE :{HEM[i][0]}&@O1D       -0.6025
+change CHARGE :{HEM[i][0]}&@O2D       -0.6098
+netcharge :{HEM[j][0]},{HEM[j][1]},{HEM[j][2]}""", file=open(str(k)+str(HEM[i][0])+"-"+str(l)+str(HEM[j][0])+".inp", 'a'))
+
+        if (l == "o"):
+            print(f"""
+netcharge :{HEM[j][0]},{HEM[j][1]},{HEM[j][2]}
+change CHARGE :{HEM[j][0]}&@FE         0.6083
+change CHARGE :{HEM[j][0]}&@NA         0.1780
+change CHARGE :{HEM[j][0]}&@C1A       -0.2990
+change CHARGE :{HEM[j][0]}&@C2A        0.2176
+change CHARGE :{HEM[j][0]}&@C3A       -0.0578
+change CHARGE :{HEM[j][0]}&@CMA       -0.0653
+change CHARGE :{HEM[j][0]}&@HMA1       0.0838
+change CHARGE :{HEM[j][0]}&@HMA2       0.0416
+change CHARGE :{HEM[j][0]}&@HMA3       0.1007
+change CHARGE :{HEM[j][0]}&@C4A       -0.2008
+change CHARGE :{HEM[j][0]}&@CHB       -0.1385
+change CHARGE :{HEM[j][0]}&@HHB        0.3521
+change CHARGE :{HEM[j][0]}&@C1B       -0.1639
+change CHARGE :{HEM[j][0]}&@NB         0.1343
+change CHARGE :{HEM[j][0]}&@C2B       -0.1095
+change CHARGE :{HEM[j][0]}&@CMB        0.0161
+change CHARGE :{HEM[j][0]}&@HMB1       0.0095
+change CHARGE :{HEM[j][0]}&@HMB2       0.0688
+change CHARGE :{HEM[j][0]}&@HMB3       0.0593
+change CHARGE :{HEM[j][0]}&@C3B        0.1107
+change CHARGE :{HEM[j][0]}&@CAB       -0.2074
+change CHARGE :{HEM[j][0]}&@HAB        0.1943
+change CHARGE :{HEM[j][0]}&@CBB       -0.4054
+change CHARGE :{HEM[j][0]}&@HBB1       0.2192
+change CHARGE :{HEM[j][0]}&@HBB2       0.1998
+change CHARGE :{HEM[j][0]}&@C4B       -0.0043
+change CHARGE :{HEM[j][0]}&@CHC       -0.2657
+change CHARGE :{HEM[j][0]}&@HHC        0.2630
+change CHARGE :{HEM[j][0]}&@C1C        0.1417
+change CHARGE :{HEM[j][0]}&@NC         0.0897
+change CHARGE :{HEM[j][0]}&@C2C       -0.0225
+change CHARGE :{HEM[j][0]}&@CMC       -0.1841
+change CHARGE :{HEM[j][0]}&@HMC1       0.1221
+change CHARGE :{HEM[j][0]}&@HMC2       0.1268
+change CHARGE :{HEM[j][0]}&@HMC3       0.0719
+change CHARGE :{HEM[j][0]}&@C3C        0.0485
+change CHARGE :{HEM[j][0]}&@CAC        0.0012
+change CHARGE :{HEM[j][0]}&@HAC        0.1508
+change CHARGE :{HEM[j][0]}&@CBC       -0.5097
+change CHARGE :{HEM[j][0]}&@HBC1       0.2648
+change CHARGE :{HEM[j][0]}&@HBC2       0.2618
+change CHARGE :{HEM[j][0]}&@C4C       -0.2418
+change CHARGE :{HEM[j][0]}&@CHD       -0.1909
+change CHARGE :{HEM[j][0]}&@HHD        0.3192
+change CHARGE :{HEM[j][0]}&@C1D       -0.0856
+change CHARGE :{HEM[j][0]}&@ND         0.1145
+change CHARGE :{HEM[j][0]}&@C2D       -0.0592
+change CHARGE :{HEM[j][0]}&@CMD       -0.0045
+change CHARGE :{HEM[j][0]}&@HMD1       0.0235
+change CHARGE :{HEM[j][0]}&@HMD2       0.0942
+change CHARGE :{HEM[j][0]}&@HMD3       0.0215
+change CHARGE :{HEM[j][0]}&@C3D       -0.1936
+change CHARGE :{HEM[j][0]}&@C4D        0.0685
+change CHARGE :{HEM[j][0]}&@CHA       -0.1387
+change CHARGE :{HEM[j][0]}&@HHA        0.3203
+change CHARGE :{HEM[j][1]}&@CB         0.0590
+change CHARGE :{HEM[j][1]}&@HB2        0.0431
+change CHARGE :{HEM[j][1]}&@HB3        0.0431
+change CHARGE :{HEM[j][1]}&@CG         0.0368
+change CHARGE :{HEM[j][1]}&@ND1       -0.1361
+change CHARGE :{HEM[j][1]}&@HD1        0.4020
+change CHARGE :{HEM[j][1]}&@CE1       -0.1891
+change CHARGE :{HEM[j][1]}&@HE1        0.2281
+change CHARGE :{HEM[j][1]}&@NE2       -0.0977
+change CHARGE :{HEM[j][1]}&@CD2       -0.2862
+change CHARGE :{HEM[j][1]}&@HD2        0.2051
+change CHARGE :{HEM[j][2]}&@CB        -0.0209
+change CHARGE :{HEM[j][2]}&@HB2        0.0667
+change CHARGE :{HEM[j][2]}&@HB3        0.0667
+change CHARGE :{HEM[j][2]}&@CG        -0.0517
+change CHARGE :{HEM[j][2]}&@ND1       -0.0005
+change CHARGE :{HEM[j][2]}&@HD1        0.3810
+change CHARGE :{HEM[j][2]}&@CE1       -0.3022
+change CHARGE :{HEM[j][2]}&@HE1        0.2830
+change CHARGE :{HEM[j][2]}&@NE2       -0.1741
+change CHARGE :{HEM[j][2]}&@CD2       -0.2124
+change CHARGE :{HEM[j][2]}&@HD2        0.2337
+change CHARGE :{HEM[j][0]}&@CAA        0.1105
+change CHARGE :{HEM[j][0]}&@HAA1       0.0269
+change CHARGE :{HEM[j][0]}&@HAA2      -0.0203
+change CHARGE :{HEM[j][0]}&@CBA       -0.0733
+change CHARGE :{HEM[j][0]}&@HBA1       0.0006
+change CHARGE :{HEM[j][0]}&@HBA2       0.0585
+change CHARGE :{HEM[j][0]}&@CGA        0.5918
+change CHARGE :{HEM[j][0]}&@O1A       -0.6537
+change CHARGE :{HEM[j][0]}&@O2A       -0.6853
+change CHARGE :{HEM[j][0]}&@CAD       -0.0291
+change CHARGE :{HEM[j][0]}&@HAD1       0.0078
+change CHARGE :{HEM[j][0]}&@HAD2       0.0658
+change CHARGE :{HEM[j][0]}&@CBD        0.2827
+change CHARGE :{HEM[j][0]}&@HBD1      -0.0293
+change CHARGE :{HEM[j][0]}&@HBD2      -0.0436
+change CHARGE :{HEM[j][0]}&@CGD        0.4783
+change CHARGE :{HEM[j][0]}&@O1D       -0.6025
+change CHARGE :{HEM[j][0]}&@O2D       -0.6098
+netcharge :{HEM[j][0]},{HEM[j][1]},{HEM[j][2]}""", file=open(str(k)+str(HEM[i][0])+"-"+str(l)+str(HEM[j][0])+".inp", 'a'))
+ 
+        if (l == "r"):
+            print(f"""
+netcharge :{HEM[j][0]},{HEM[j][1]},{HEM[j][2]}
+change CHARGE :{HEM[j][0]}&@FE         0.4223
+change CHARGE :{HEM[j][0]}&@NA         0.1973
+change CHARGE :{HEM[j][0]}&@C1A       -0.3489
+change CHARGE :{HEM[j][0]}&@C2A        0.2187
+change CHARGE :{HEM[j][0]}&@C3A       -0.0877
+change CHARGE :{HEM[j][0]}&@CMA       -0.0598
+change CHARGE :{HEM[j][0]}&@HMA1       0.0703
+change CHARGE :{HEM[j][0]}&@HMA2       0.0281
+change CHARGE :{HEM[j][0]}&@HMA3       0.0872
+change CHARGE :{HEM[j][0]}&@C4A       -0.2107
+change CHARGE :{HEM[j][0]}&@CHB       -0.1614
+change CHARGE :{HEM[j][0]}&@HHB        0.3441
+change CHARGE :{HEM[j][0]}&@C1B       -0.1858
+change CHARGE :{HEM[j][0]}&@NB         0.1413
+change CHARGE :{HEM[j][0]}&@C2B       -0.0884   
+change CHARGE :{HEM[j][0]}&@CMB        0.0466
+change CHARGE :{HEM[j][0]}&@HMB1      -0.0146
+change CHARGE :{HEM[j][0]}&@HMB2       0.0447
+change CHARGE :{HEM[j][0]}&@HMB3       0.0352
+change CHARGE :{HEM[j][0]}&@C3B        0.0348
+change CHARGE :{HEM[j][0]}&@CAB       -0.2072
+change CHARGE :{HEM[j][0]}&@HAB        0.1898
+change CHARGE :{HEM[j][0]}&@CBB       -0.4301
+change CHARGE :{HEM[j][0]}&@HBB1       0.2165
+change CHARGE :{HEM[j][0]}&@HBB2       0.1971
+change CHARGE :{HEM[j][0]}&@C4B       -0.0142
+change CHARGE :{HEM[j][0]}&@CHC       -0.2576
+change CHARGE :{HEM[j][0]}&@HHC        0.2520
+change CHARGE :{HEM[j][0]}&@C1C        0.0528
+change CHARGE :{HEM[j][0]}&@NC         0.1307
+change CHARGE :{HEM[j][0]}&@C2C        0.0116
+change CHARGE :{HEM[j][0]}&@CMC       -0.1501
+change CHARGE :{HEM[j][0]}&@HMC1       0.0991
+change CHARGE :{HEM[j][0]}&@HMC2       0.1038
+change CHARGE :{HEM[j][0]}&@HMC3       0.0489
+change CHARGE :{HEM[j][0]}&@C3C        0.0046
+change CHARGE :{HEM[j][0]}&@CAC       -0.0156
+change CHARGE :{HEM[j][0]}&@HAC        0.1293
+change CHARGE :{HEM[j][0]}&@CBC       -0.5384
+change CHARGE :{HEM[j][0]}&@HBC1       0.2611
+change CHARGE :{HEM[j][0]}&@HBC2       0.2581
+change CHARGE :{HEM[j][0]}&@C4C       -0.2427
+change CHARGE :{HEM[j][0]}&@CHD       -0.2138
+change CHARGE :{HEM[j][0]}&@HHD        0.3122
+change CHARGE :{HEM[j][0]}&@C1D       -0.0975
+change CHARGE :{HEM[j][0]}&@ND         0.1255
+change CHARGE :{HEM[j][0]}&@C2D       -0.0861
+change CHARGE :{HEM[j][0]}&@CMD        0.0005
+change CHARGE :{HEM[j][0]}&@HMD1       0.0098
+change CHARGE :{HEM[j][0]}&@HMD2       0.0805
+change CHARGE :{HEM[j][0]}&@HMD3       0.0078
+change CHARGE :{HEM[j][0]}&@C3D       -0.1965
+change CHARGE :{HEM[j][0]}&@C4D        0.0236
+change CHARGE :{HEM[j][0]}&@CHA       -0.1216
+change CHARGE :{HEM[j][0]}&@HHA        0.3063
+change CHARGE :{HEM[j][1]}&@CB         0.0426
+change CHARGE :{HEM[j][1]}&@HB2        0.0349
+change CHARGE :{HEM[j][1]}&@HB3        0.0349
+change CHARGE :{HEM[j][1]}&@CG         0.0408
+change CHARGE :{HEM[j][1]}&@ND1       -0.1881
+change CHARGE :{HEM[j][1]}&@HD1        0.3920
+change CHARGE :{HEM[j][1]}&@CE1       -0.1901
+change CHARGE :{HEM[j][1]}&@HE1        0.2191
+change CHARGE :{HEM[j][1]}&@NE2       -0.0847
+change CHARGE :{HEM[j][1]}&@CD2       -0.3012
+change CHARGE :{HEM[j][1]}&@HD2        0.2011
+change CHARGE :{HEM[j][2]}&@CB        -0.0373
+change CHARGE :{HEM[j][2]}&@HB2        0.0585
+change CHARGE :{HEM[j][2]}&@HB3        0.0585
+change CHARGE :{HEM[j][2]}&@CG        -0.0477
+change CHARGE :{HEM[j][2]}&@ND1       -0.0525
+change CHARGE :{HEM[j][2]}&@HD1        0.3710
+change CHARGE :{HEM[j][2]}&@CE1       -0.3032
+change CHARGE :{HEM[j][2]}&@HE1        0.2740
+change CHARGE :{HEM[j][2]}&@NE2       -0.1611
+change CHARGE :{HEM[j][2]}&@CD2       -0.2274
+change CHARGE :{HEM[j][2]}&@HD2        0.2297
+change CHARGE :{HEM[j][0]}&@CAA        0.1105
+change CHARGE :{HEM[j][0]}&@HAA1       0.0269
+change CHARGE :{HEM[j][0]}&@HAA2      -0.0203
+change CHARGE :{HEM[j][0]}&@CBA       -0.0733
+change CHARGE :{HEM[j][0]}&@HBA1       0.0006
+change CHARGE :{HEM[j][0]}&@HBA2       0.0585
+change CHARGE :{HEM[j][0]}&@CGA        0.5918
+change CHARGE :{HEM[j][0]}&@O1A       -0.6537
+change CHARGE :{HEM[j][0]}&@O2A       -0.6853
+change CHARGE :{HEM[j][0]}&@CAD       -0.0291
+change CHARGE :{HEM[j][0]}&@HAD1       0.0078
+change CHARGE :{HEM[j][0]}&@HAD2       0.0658
+change CHARGE :{HEM[j][0]}&@CBD        0.2827
+change CHARGE :{HEM[j][0]}&@HBD1      -0.0293
+change CHARGE :{HEM[j][0]}&@HBD2      -0.0436
+change CHARGE :{HEM[j][0]}&@CGD        0.4783
+change CHARGE :{HEM[j][0]}&@O1D       -0.6025
+change CHARGE :{HEM[j][0]}&@O2D       -0.6098
+netcharge :{HEM[j][0]},{HEM[j][1]},{HEM[j][2]}""", file=open(str(k)+str(HEM[i][0])+"-"+str(l)+str(HEM[j][0])+".inp", 'a'))
+
+        print(f"""
+outparm {k}{HEM[i][0]}-{l}{HEM[j][0]}.prmtop
+quit
+        """, file=open(str(k)+str(HEM[i][0])+"-"+str(l)+str(HEM[j][0])+".inp", 'a'))
+
+        print(f"\n Generating topology for {k}{HEM[i][0]}-{l}{HEM[j][0]} ...")
+        subprocess.run("parmed -i "+str(k)+str(HEM[i][0])+"-"+str(l)+str(HEM[j][0])+".inp > "+str(k)+str(HEM[i][0])+"-"+str(l)+str(HEM[j][0])+".log", shell=True)
+################################################################################################################################################
+
+################################################################################################################################################
+
+def HemeHemeInt_HemeB(Output, Solv, HemeType):
+
+    if (os.path.isfile(f"RefState.prmtop") == False):
+        print("""
+ Generating the reference state topology where all hemes
+ are in the reduced state.
+ """)
+        DefineRefState(Output, HemeType)
+    elif (os.path.isfile(f"RefState.prmtop") == True):
+        print("""
+ Found RefState.prmtop
+ """)
+
+    Es = []
+    if (os.path.isfile("Lambda.txt") == True):
+        with open('Lambda.txt', 'r') as fp:
+            lines = fp.readlines()
+            for line in lines:
+                word1 = 'Es        ='
+
+                if (line.find(word1) != -1):
+                    Es.append(float(line.strip().split()[2]))
+
+        if(len(Es) != 0):
+            min_epsin = round(min(Es), 3)
+            min_epsin = round(min(Es), 3)
+            max_epsin = round(max(Es), 3)
+            avg_epsin = round((sum(Es)/len(Es)), 3)
+
+            while True:
+                SelEpsin = str(input(f""" 
+ The internal dielectric constants range from {min_epsin} to {max_epsin}
+ The average internal dielectric constant is {avg_epsin}
+ 
+ Would you like to use this average value for the PBSA calculations to
+ compute heme-heme interactions? """))
+                if (SelEpsin == "YES") or (SelEpsin == "Yes") or (SelEpsin == "yes") or (SelEpsin == "Y") or (SelEpsin == "y"):
+                    epsin = avg_epsin
+                    break
+
+                elif (SelEpsin == "NO") or (SelEpsin == "No") or (SelEpsin == "no") or (SelEpsin == "N") or (SelEpsin == "n"):
+                    while True:
+                        try:
+                            epsin = round(float(input(" What should the average internal static dielectric constant be? ")), 3)
+                        except ValueError:
+                            print(" Your entry needs to be a floating-poiint number.")
+                        else:
+                            break
+                        break
+                    break
+                else: 
+                    print(" Sorry, I didn't understand your response.")
+
+        if(len(Es) == 0):
+            while True:
+                try:
+                    epsin = round(float(input(""" 
+ An average interior static dielectric constant
+ cannot be assigned for the PBSA calculations from 
+ Lambda.txt it was not previously computed. 
+
+ What value would you like to use? """)), 3)
+                except ValueError:
+                    print(" Your entry needs to be a floating-poiint number.")
+                else:
+                    break
+                break
+
+    elif (os.path.isfile("Lambda.txt") == False):
+        while True:
+            try:
+                epsin = round(float(input(""" 
+ An average interior static dielectric constant
+ cannot be assigned for the PBSA calculations from 
+ Lambda.txt because the file does not exist. 
+
+ what value would you like to use? """)), 3)
+            except ValueError:
+                print(" Your entry needs to be a floating-poiint number.")
+            else:
+                break
+            break
+
+    while True:
+        try:
+            epsout = round(float(input(" What should the external static dielectric be? ")), 3)
+        except ValueError:
+            print(" Your entry needs to be a floating-poiint number.")
+        else:
+            break
+        break
+
+    while True:
+        try:
+            istrng = float(input(f" What ionic strength should be used in mM? "))
+        except ValueError:
+            print(" Your entry needs to be a floating-poiint number.")
+        else:
+            break
+   
+    while True:
+        memb = input(f" Should there be an implicit slab membrane? ")
+
+        if (memb == "YES") or (memb == "Yes") or (memb == "yes") or (memb == "Y") or (memb == "y"):
+            membraneopt = 1
+
+            while True:
+                try:
+                    epsmem = float(input(f" What should be the value of the membrane dielectric constant? "))
+                except ValueError:
+                    print(" Your entry needs to be a floating-poiint number.")
+                else:
+                    break
+
+            IPB = 1
+            INP = 0
+            ivalence = 0
+            bcopt = 10
+            eneopt = 1
+            sasopt = 0
+            solvopt = 1
+            smoothopt = 1
+            maxitn = 200
+            nfocus = 1
+
+            while True:
+                SelPoretype = input(f" Does the protein have a solvent-filled channel region that should be automatically detected? ")
+                if (SelPoretype == "YES") or (SelPoretype == "Yes") or (SelPoretype == "yes") or (SelPoretype == "Y") or (SelPoretype == "y"):
+                    poretype = 1
+                    break
+                elif (SelPoretype == "NO") or (SelPoretype == "No") or (SelPoretype == "n") or (SelPoretype == "N") or (SelPoretype == "n"):
+                    poretype = 0
+                    break
+                else:
+                    print(" Sorry, I didn't understand your respond.")
+            break
+        elif (memb == "NO") or (memb == "No") or (memb == "no") or (memb == "N") or (memb == "n"):
+            while True:
+                SelDelphi = input(f" Should a solution-phease Delphi-like calculation be performed? ")
+
+                if (SelDelphi == "YES") or (SelDelphi == "Yes") or (SelDelphi == "yes") or (SelDelphi == "Y") or (SelDelphi == "y"):
+                    membraneopt = 0
+                    poretype = 0
+                    epsmem = epsout
+                    IPB = 1
+                    INP = 0
+                    ivalence = 1
+                    bcopt = 5
+                    eneopt = 2
+                    sasopt = 0
+                    solvopt = 1
+                    smoothopt = 2
+                    maxitn = 100
+                    nfocus = 1
+
+                    break
+
+                elif (SelDelphi == "NO") or (SelDelphi == "No") or (SelDelphi == "n") or (SelDelphi == "N") or (SelDelphi == "n"):
+                    membraneopt = 0
+                    poretype = 0
+                    epsmem = epsout
+                    IPB = 2
+                    INP = 2
+                    ivalence = 0
+                    bcopt = 5
+                    eneopt = 2
+                    sasopt = 0
+                    solvopt = 1
+                    smoothopt = 1
+                    maxitn = 100
+                    nfocus = 2
+
+                    break
+
+                else:
+                    print(" Sorry, I didn't understand your response.")
+            break
+        else:
+            print(" Sorry, I didn't understand your response.")
+
+    if (os.path.isfile(f"pbsa_epsin{epsin}_epsout{epsout}.key") == True):
+        print(f""" 
+ Found pbsa_epsin{epsin}_epsout{epsout}.key to be used in PBSA calculation""")
+    elif (os.path.isfile(f"pbsa_epsin{epsin}_epsout{epsout}.key") == False):
+        print(f"""
+ Single point PB calculation
+ &cntrl
+  IPB={IPB},             ! Dielectric interface model with the level-set funciton
+  INP={INP},             ! Non-polar solvation free energy method   
+  ntx=1,             ! Read formatted coordinates from inpcrd 
+  imin=1,            ! Single-point energy evalulation 
+ /
+
+ &pb
+  pbtemp=300,        ! Temperature for salt effects in PB equation 
+  ivalence={ivalence},        ! 
+  istrng={istrng},      ! Ionic strength in mM for PB equation 
+  epsin={epsin},       ! Solute region dielectric constant 
+  epsout={epsout},       ! Solvent region dielectric constant 
+  epsmem={epsmem},       ! Membrane dielectric constant
+  membraneopt={membraneopt},     ! Turn off/on implicit slab membrane
+  mthick=40.0        ! Membrane thickness in Å
+  mctrdz=0,          ! Membrane center in Z direction Å; 0 = centered at center of protein 
+  poretype={poretype},        ! Turn off(0)/on(1) pore-searching algorithm
+  radiopt=0,         ! Atomic radii from topology used; optimized radius (choice 1) for FE is missing 
+  dprob=1.4,         ! Solvent probe radius for molecular surface definition  
+  iprob=2.0,         ! Mobile ion probe radius used to define the Stern layer. 
+  mprob=2.7,         ! Membrane lipid probe radius 
+  sasopt=0,          ! Use solvent-excluded surface type for solute 
+  triopt=1,          ! Use trimer arc dots to map analytical solvent excluded surface  
+  arcres=0.25,       ! Resolution of dots (in Å) used to represent solvent-accessible arcs 
+  smoothopt={smoothopt},       ! Use weighted harmonic average of epsin and epsout for boundary grid edges across solute/solvent dielectric boundary 
+  saopt=1,           ! Compute solute surface area 
+  decompopt=2,       ! sigma decomposiiton scheme for non-polar solvation 
+  use_rmin=1,        ! Use rmin for van der waals radi, improves agreement with TIP3P
+  sprob=0.557,       ! Compute dispersion term using solvent probe radius (in Å) for solvent accessible surface area 
+  vprob=1.300,       ! Compute non-polar cavity solvation free energy using olvent probe radius (in Å) for molecular volume 
+  rhow_effect=1.129, ! Effective water density for non-polar dispersion term
+  use_sav=1,         ! Use molecular volume for cavity term
+  maxsph=400,        ! Approximate number of dots to represent the maximum atomic solvent accessible surface
+  npbopt=0,          ! Linear PB equation is solved  
+  solvopt=1,         ! ICCG/PICCG iterative solver 
+  accept=0.001,      ! Iteration convergence criterion   
+  maxitn={maxitn},        ! Maximum number of iterations for finite difference solver 
+  fillratio=1.5,     ! ratio between longest dimension of rectangular finite-difference grid and that of the solute    
+  space=0.5,         ! Grid spacing for finite-difference solver 
+  nfocus={nfocus},          ! Number of successive FD calculations for electrostatic focusing  
+  fscale=8,          ! Ratio between coarse and fine grid spacings in electrostatic focussing 
+  npbgrid=1,         ! Frequency for regenerating finite-difference grid 
+  bcopt={bcopt},           ! Boundary grid potentials computed using all grid charges
+  eneopt={eneopt},          ! Reaction field energy computed using dielectric boundary surface charges 
+  frcopt=2,          ! reaction field forces and dielectric boundary forces computed with dielectric boundary surface polarized charges 
+  scalec=0,          ! Dielectric boundary surface charges are not scaled before computing reaction field energy and forces
+  cutfd=5,           ! Atom-based cutoff distance to remove short-range finite-difference interactions and to add pairwise charge-based interactions
+  cutnb=0,           ! Atom-based cutoff distance for van der Waals interactions and pairwise Coulombic interactions when eneopt=2   
+  !phiout=1,         ! Output spatial distribution of electrostatic potential f
+  !phiform=2,        ! DX format of the electrostatic potential file for VMD
+  !outlvlset=true,   ! Output total level set, used in locating interfaces between regions of differing dielectric constant
+  !outmlvlset=true,  ! Output membrane level set, used in locating interfaces between regions of differing dielectric constant
+  !npbverb=1,        ! Output verbosity; 1 is verbose 
+  !isurfchg=1,       ! Save surface changes to a file
+ /
+        """, file=open(f"pbsa_epsin{epsin}_epsout{epsout}.key", 'w'))
+
+    if (Solv == "EXPLICIT") or (Solv == "Explicit") or (Solv == "explicit") or (Solv == "E") or (Solv == "e"):
+        if (os.path.isfile("GenerateCoordForPBSA.in") == True):
+            if (os.path.isfile("StrucForPBSA.RefState.prmtop") == True) and (os.path.isfile("StrucForPBSA.rst7") == True):
+                print(f" Found StrucForPBSA.RefState.prmtop & StrucForPBSA.rst7")
+        elif (os.path.isfile("GenerateCoordForPBSA.in") == False):
+            print("""
+ parm    RefState.prmtop
+ trajin  min.rst7
+ strip   :WAT,Na+,Cl- outprefix StrucForPBSA
+ trajout StrucForPBSA.rst7
+ run
+            """, file=open("GenerateCoordForPBSA.in", 'w'))
+            subprocess.run("cpptraj -i GenerateCoordForPBSA.in > GenerateCoordForPBSA.log", shell=True)
+    elif (Solv == "IMPLICIT") or (Solv == "Implicit") or (Solv == "implicit") or (Solv == "I") or (Solv == "i"):
+        if (os.path.isfile("GenerateCoordForPBSA.in") == True):
+            if (os.path.isfile("StrucForPBSA.RefState.prmtop") == True) and (os.path.isfile("StrucForPBSA.rst7") == True):
+                print(f" Found StrucForPBSA.RefState.prmtop & StrucForPBSA.rst7")
+        elif (os.path.isfile("GenerateCoordForPBSA.in") == False):
+            print("""
+ parm    RefState.prmtop
+ trajin  min.rst7
+ parmwrite out StrucForPBSA.RefState.prmtop
+ trajout StrucForPBSA.rst7
+ run
+            """, file=open("GenerateCoordForPBSA.in", 'w'))
+            subprocess.run("cpptraj -i GenerateCoordForPBSA.in > GenerateCoordForPBSA.log", shell=True)
+
+    while True:
+        CompChoice = input(" Do you wish to run any needed computaitons in serial or parallel (s/p)? ")
+
+        if (CompChoice == "SERIAL") or (CompChoice == "Serial") or (CompChoice == "serial") or (CompChoice == "S") or (CompChoice == "s") or (CompChoice == "PARALLEL") or (CompChoice == "Parallel") or (CompChoice == "parallel") or (CompChoice == "P") or (CompChoice == "p"):
+            break
+        else:
+            print(" Sorry, I didn't understand your choice. Please try again.")
+
+    HisID = []; HebID = []; HEM = []
+    with open("BondDefinitions.txt") as f:
+        for line in f:
+            HisID.append(int(line.strip().split('.')[1]))
+            HebID.append(int(line.strip().split('.')[3]))
+
+    for i in range(0, len(HisID), 2):
+        HEM.append([HebID[i], HisID[i], HisID[i+1]])
+
+    M = [[0 for column in range(len(HEM))] for row in range(len(HEM))]
+    N = [[0 for column in range(4)] for row in range(4)]
+
+    print("State Energies", file=open('StateEnergies.txt', 'w'))
+    print("""
+ Each line in this file indicates from left-to-right:
+
+ Fields 1 & 2: 
+    The redox state (o = oxidized/r = reduced) and 
+    zero-based index of the first heme in the 
+    considered pair
+ Fields 3 & 4: 
+    The redox state (o = oxidized/r = reduced) and 
+    zero-based index of the second heme in the 
+    considered pair
+ Field 5: 
+    The total system energy computed with PBSA for 
+    the specified redox microstates. If there are 
+    more than two hemes, the hemes not specified 
+    on a given line are in the reduced state.
+
+ The end of the file presents the matrix of state energies
+ where diagonal elements are oxidation energies and 
+ off-diagonal elements are interaction energies.
+
+ All energies are in meV and relative to the fully reduced
+ system. Positive interaction energies indicate how much 
+ the oxidaiton of one heme is disfavored byt he oxidaiton 
+ of the adjacent heme. \n
+ """, file=open('StateEnergies.txt', 'a'))
+
+    for i in range(0, len(HEM)):
+        for j in range(0, len(HEM)):
+            if (j == i):
+                pass
+            if (j != i):
+                idxc = 0
+                command = ['']*(4)
+                print(f"""
+ ================================================
+ Analyzing pair {HEM[i][0]} - {HEM[j][0]}...
+ ================================================""")
+
+                for k in ("o", "r"):
+                    for l in ("o", "r"):
+
+                        if (k == "o") and (l == "o"):
+                            if (os.path.isfile(str(k)+str(HEM[i][0])+"-"+str(l)+str(HEM[j][0])+".prmtop") == False):
+                                PairedChargeAssignment_HemeB(Output, HEM, i, j, k, l)
+
+                            if (os.path.isfile(str(k)+str(HEM[i][0])+"-"+str(l)+str(HEM[j][0])+".prmtop") == True):
+                                if (os.path.isfile(f"pbsa_{k}{HEM[i][0]}-{l}{HEM[j][0]}_epsin{epsin}_epsout{epsout}.out") == True):
+                                    print(f""" 
+ Found pbsa_{k}{HEM[i][0]}-{l}{HEM[j][0]}_epsin{epsin}_epsout{epsout}.out from a prior execution.
+ This prior output will be used for the analysis.""")
+                                elif (os.path.isfile(f"pbsa_{k}{HEM[i][0]}-{l}{HEM[j][0]}_epsin{epsin}_epsout{epsout}.out") == False):
+                                    print(f""" 
+ Did not find pbsa_{k}{HEM[i][0]}-{l}{HEM[j][0]}_epsin{epsin}_epsout{epsout}.out from a prior execution.
+ The calculation will be submitted.""")
+                                    if (CompChoice == "SERIAL") or (CompChoice == "Serial") or (CompChoice == "serial") or (CompChoice == "S") or (CompChoice == "s"):
+                                        print(f" Running PBSA calculation for {k}{HEM[i][0]}-{l}{HEM[j][0]} ...")
+                                        subprocess.run(f"pbsa -O -i pbsa_epsin{epsin}_epsout{epsout}.key -o pbsa_{k}{HEM[i][0]}-{l}{HEM[j][0]}_epsin{epsin}_epsout{epsout}.out -p {k}{HEM[i][0]}-{l}{HEM[j][0]}.prmtop -c StrucForPBSA.rst7", shell=True)
+                                    if (CompChoice == "PARALLEL") or (CompChoice == "Parallel") or (CompChoice == "parallel") or (CompChoice == "P") or (CompChoice == "p"):
+                                        command[idxc] = f"pbsa -O -i pbsa_epsin{epsin}_epsout{epsout}.key -o pbsa_{k}{HEM[i][0]}-{l}{HEM[j][0]}_epsin{epsin}_epsout{epsout}.out -p {k}{HEM[i][0]}-{l}{HEM[j][0]}.prmtop -c StrucForPBSA.rst7"
+                                        idxc += 1
+
+                        if (k == "r") and (l == "o"):
+                            if (os.path.isfile(str(k)+str(HEM[i][0])+"-"+str(l)+str(HEM[j][0])+".prmtop") == False):
+                                PairedChargeAssignment_HemeB(Output, HEM, i, j, k, l)
+
+                            if (os.path.isfile(str(k)+str(HEM[i][0])+"-"+str(l)+str(HEM[j][0])+".prmtop") == True):
+                                if (os.path.isfile(f"pbsa_{k}{HEM[i][0]}-{l}{HEM[j][0]}_epsin{epsin}_epsout{epsout}.out") == True):
+                                    print(f""" 
+ Found pbsa_{k}{HEM[i][0]}-{l}{HEM[j][0]}_epsin{epsin}_epsout{epsout}.out from a prior execution.
+ This prior output will be used for the analysis.""")
+                                elif (os.path.isfile(f"pbsa_{k}{HEM[i][0]}-{l}{HEM[j][0]}_epsin{epsin}_epsout{epsout}.out") == False):
+                                    print(f""" 
+ Did not find pbsa_{k}{HEM[i][0]}-{l}{HEM[j][0]}_epsin{epsin}_epsout{epsout}.out from a prior execution.
+ The calculation will be submitted.""")
+                                    if (CompChoice == "SERIAL") or (CompChoice == "Serial") or (CompChoice == "serial") or (CompChoice == "S") or (CompChoice == "s"):
+                                        print(f" Running PBSA calculation for {k}{HEM[i][0]}-{l}{HEM[j][0]} ...")
+                                        subprocess.run(f"pbsa -O -i pbsa_epsin{epsin}_epsout{epsout}.key -o pbsa_{k}{HEM[i][0]}-{l}{HEM[j][0]}_epsin{epsin}_epsout{epsout}.out -p {k}{HEM[i][0]}-{l}{HEM[j][0]}.prmtop -c StrucForPBSA.rst7", shell=True)
+                                    if (CompChoice == "PARALLEL") or (CompChoice == "Parallel") or (CompChoice == "parallel") or (CompChoice == "P") or (CompChoice == "p"):
+                                        command[idxc] = f"pbsa -O -i pbsa_epsin{epsin}_epsout{epsout}.key -o pbsa_{k}{HEM[i][0]}-{l}{HEM[j][0]}_epsin{epsin}_epsout{epsout}.out -p {k}{HEM[i][0]}-{l}{HEM[j][0]}.prmtop -c StrucForPBSA.rst7"
+                                        idxc += 1
+
+                        if (k == "o") and (l == "r"):
+                            if (os.path.isfile(str(k)+str(HEM[i][0])+"-"+str(l)+str(HEM[j][0])+".prmtop") == False):
+                                PairedChargeAssignment_HemeB(Output, HEM, i, j, k, l)
+
+                            if (os.path.isfile(str(k)+str(HEM[i][0])+"-"+str(l)+str(HEM[j][0])+".prmtop") == True):
+                                if (os.path.isfile(f"pbsa_{k}{HEM[i][0]}-{l}{HEM[j][0]}_epsin{epsin}_epsout{epsout}.out") == True):
+                                    print(f""" 
+ Found pbsa_{k}{HEM[i][0]}-{l}{HEM[j][0]}_epsin{epsin}_epsout{epsout}.out from a prior execution.
+ This prior output will be used for the analysis.""")
+                                elif (os.path.isfile(f"pbsa_{k}{HEM[i][0]}-{l}{HEM[j][0]}_epsin{epsin}_epsout{epsout}.out") == False):
+                                    print(f""" 
+ Did not find pbsa_{k}{HEM[i][0]}-{l}{HEM[j][0]}_epsin{epsin}_epsout{epsout}.out from a prior execution.
+ The calculation will be submitted.""")
+                                    if (CompChoice == "SERIAL") or (CompChoice == "Serial") or (CompChoice == "serial") or (CompChoice == "S") or (CompChoice == "s"):
+                                        print(f" Running PBSA calculation for {k}{HEM[i][0]}-{l}{HEM[j][0]} ...")
+                                        subprocess.run(f"pbsa -O -i pbsa_epsin{epsin}_epsout{epsout}.key -o pbsa_{k}{HEM[i][0]}-{l}{HEM[j][0]}_epsin{epsin}_epsout{epsout}.out -p {k}{HEM[i][0]}-{l}{HEM[j][0]}.prmtop -c StrucForPBSA.rst7", shell=True)
+                                    if (CompChoice == "PARALLEL") or (CompChoice == "Parallel") or (CompChoice == "parallel") or (CompChoice == "P") or (CompChoice == "p"):
+                                        command[idxc] = f"pbsa -O -i pbsa_epsin{epsin}_epsout{epsout}.key -o pbsa_{k}{HEM[i][0]}-{l}{HEM[j][0]}_epsin{epsin}_epsout{epsout}.out -p {k}{HEM[i][0]}-{l}{HEM[j][0]}.prmtop -c StrucForPBSA.rst7"
+                                        idxc += 1
+
+                        if (k == "r") and (l == "r"):
+                            if (os.path.isfile(str(k)+str(HEM[i][0])+"-"+str(l)+str(HEM[j][0])+".prmtop") == False):
+                                PairedChargeAssignment_HemeB(Output, HEM, i, j, k, l)
+
+                            if (os.path.isfile(str(k)+str(HEM[i][0])+"-"+str(l)+str(HEM[j][0])+".prmtop") == True):
+                                if (os.path.isfile(f"pbsa_{k}{HEM[i][0]}-{l}{HEM[j][0]}_epsin{epsin}_epsout{epsout}.out") == True):
+                                    print(f""" 
+ Found pbsa_{k}{HEM[i][0]}-{l}{HEM[j][0]}_epsin{epsin}_epsout{epsout}.out from a prior execution.
+ This prior output will be used for the analysis.""")
+                                elif (os.path.isfile(f"pbsa_{k}{HEM[i][0]}-{l}{HEM[j][0]}_epsin{epsin}_epsout{epsout}.out") == False):
+                                    print(f""" 
+ Did not find pbsa_{k}{HEM[i][0]}-{l}{HEM[j][0]}_epsin{epsin}_epsout{epsout}.out from a prior execution.
+ The calculation will be submitted.""")
+                                    if (CompChoice == "SERIAL") or (CompChoice == "Serial") or (CompChoice == "serial") or (CompChoice == "S") or (CompChoice == "s"):
+                                        print(f" Running PBSA calculation for {k}{HEM[i][0]}-{l}{HEM[j][0]} ...")
+                                        subprocess.run(f"pbsa -O -i pbsa_epsin{epsin}_epsout{epsout}.key -o pbsa_{k}{HEM[i][0]}-{l}{HEM[j][0]}_epsin{epsin}_epsout{epsout}.out -p {k}{HEM[i][0]}-{l}{HEM[j][0]}.prmtop -c StrucForPBSA.rst7", shell=True)
+                                    if (CompChoice == "PARALLEL") or (CompChoice == "Parallel") or (CompChoice == "parallel") or (CompChoice == "P") or (CompChoice == "p"):
+                                        command[idxc] = f"pbsa -O -i pbsa_epsin{epsin}_epsout{epsout}.key -o pbsa_{k}{HEM[i][0]}-{l}{HEM[j][0]}_epsin{epsin}_epsout{epsout}.out -p {k}{HEM[i][0]}-{l}{HEM[j][0]}.prmtop -c StrucForPBSA.rst7"
+                                        idxc += 1
+            
+                if (idxc != 0):
+                    commandrev = list(filter(None, command))
+                    print("\n Submitting "+str(len(commandrev))+" PBSA calculations in parallel")
+                    procs = [ subprocess.Popen(i, shell=True) for i in commandrev ]
+
+                    for p in procs:
+                        p.wait()
+                        print("  Finished: "+str(p))
+
+                chk = 4
+                if (os.path.isfile(f"pbsa_o{HEM[i][0]}-o{HEM[j][0]}_epsin{epsin}_epsout{epsout}.out") == False):
+                    chk -= 1
+                    print(f" Something went wrong! pbsa_o{HEM[i][0]}-o{HEM[j][0]}_epsin{epsin}_epsout{epsout}.out is missing.""")
+                if (os.path.isfile(f"pbsa_o{HEM[i][0]}-r{HEM[j][0]}_epsin{epsin}_epsout{epsout}.out") == False):
+                    chk -= 1
+                    print(f" Something went wrong! pbsa_o{HEM[i][0]}-r{HEM[j][0]}_epsin{epsin}_epsout{epsout}.out is missing.""")
+                if (os.path.isfile(f"pbsa_r{HEM[i][0]}-o{HEM[j][0]}_epsin{epsin}_epsout{epsout}.out") == False):
+                    chk -= 1
+                    print(f" Something went wrong! pbsa_r{HEM[i][0]}-o{HEM[j][0]}_epsin{epsin}_epsout{epsout}.out is missing.""")
+                if (os.path.isfile(f"pbsa_r{HEM[i][0]}-r{HEM[j][0]}_epsin{epsin}_epsout{epsout}.out") == False):
+                    chk -= 1
+                    print(f" Something went wrong! pbsa_r{HEM[i][0]}-r{HEM[j][0]}_epsin{epsin}_epsout{epsout}.out is missing.""")
+
+                if (chk == 4):
+                    #print(" All four files found") 
+                     
+                    for k in ("o", "r"):
+                        for l in ("o", "r"):
+
+                            if (k == "o") and (l == "o"):
+                                idx = 0
+                                with open(f"pbsa_{k}{HEM[i][0]}-{l}{HEM[j][0]}_epsin{epsin}_epsout{epsout}.out", 'r', encoding="latin-1") as fp:
+                                    lines = fp.readlines()
+                                    for line in lines:
+                                        word1 = 'Etot'
+
+                                        if (line.find(word1) != -1) and (idx == 0):
+                                            N[0][0] = float(line.strip().split()[2]) * 0.043 
+                                            print(k, i, l, j, round(N[0][0], 3), file=open('StateEnergies.txt', 'a'))
+                                            idx += 1
+
+                            if (k == "o") and (l == "r"):
+                                idx = 0
+                                with open(f"pbsa_{k}{HEM[i][0]}-{l}{HEM[j][0]}_epsin{epsin}_epsout{epsout}.out", 'r', encoding="latin-1") as fp:
+                                    lines = fp.readlines()
+                                    for line in lines:
+                                        word1 = 'Etot'
+
+                                        if (line.find(word1) != -1) and (idx == 0):
+                                            N[0][1] = float(line.strip().split()[2]) * 0.043 
+                                            print(k, i, l, j, round(N[0][1], 3), file=open('StateEnergies.txt', 'a'))
+                                            idx += 1
+
+                            if (k == "r") and (l == "o"):
+                                idx = 0
+                                with open(f"pbsa_{k}{HEM[i][0]}-{l}{HEM[j][0]}_epsin{epsin}_epsout{epsout}.out", 'r', encoding="latin-1") as fp:
+                                    lines = fp.readlines()
+                                    for line in lines:
+                                        word1 = 'Etot'
+
+                                        if (line.find(word1) != -1) and (idx == 0):
+                                            N[1][0] = float(line.strip().split()[2]) * 0.043 
+                                            print(k, i, l, j, round(N[1][0], 3), file=open('StateEnergies.txt', 'a'))
+                                            idx += 1
+                                    
+                            if (k == "r") and (l == "r"):
+                                idx = 0
+                                with open(f"pbsa_{k}{HEM[i][0]}-{l}{HEM[j][0]}_epsin{epsin}_epsout{epsout}.out", 'r', encoding="latin-1") as fp:
+                                    lines = fp.readlines()
+                                    for line in lines:
+                                        word1 = 'Etot'
+
+                                        if (line.find(word1) != -1) and (idx == 0):
+                                            N[1][1] = float(line.strip().split()[2]) * 0.043 
+                                            print(k, i, l, j, round(N[1][1], 3), file=open('StateEnergies.txt', 'a'))
+                                            idx += 1
+
+                M[i][i] = round(((N[0][1] - N[1][1]))*1000, 3)
+                M[i][j] = round(((N[0][0] - N[1][0]) - (N[0][1] - N[1][1]))*1000, 3)
+                M[j][i] = round(((N[0][0] - N[0][1]) - (N[1][0] - N[1][1]))*1000, 3)
+                M[j][j] = round(((N[1][0] - N[1][1]))*1000, 3)
+
+    print("""
+ Matrix of State Energies:
+    Diagonal terms = oxidation energies
+    Off-diagonal terms = interaction energies
+
+    All energies are in meV and relative to the fully reduced
+    system. Positive interaction energies indicate how much 
+    the oxidaiton of one heme is disfavored byt he oxidaiton 
+    of the adjacent heme. \n """)
+
+    print(*M, sep='\n')
+
+    print("""
+ This data and the individual state energies on whcih 
+ it is based is saved to StateEnergies.txt.""")
+
+    print("\n", *M, sep='\n', file=open('StateEnergies.txt', 'a'))
+
+################################################################################################################################################
+
+################################################################################################################################################
+
+def DeltaGFromLIE(Output, HemeType):
+
+    if (os.path.isfile(f"RefState.prmtop") == False):
+        print("""
+ Generating the reference state topology where all hemes
+ are in the reduced state.
+ """)
+        DefineRefState(Output, HemeType)
+    elif (os.path.isfile(f"RefState.prmtop") == True):
+        print("""
+ Found RefState.prmtop
+ """)
 
     idx = 0
     with open("LinearizedHemeSequence.txt") as fp:
@@ -941,11 +4169,11 @@ def DeltaGFromLIE(Output):
             for state in ["ox", "red"]:
                 if (state == "ox"):
                     print("""
- parm %s.prmtop
+ parm RefState.prmtop
  changeRedoxState :%0d 0
  outparm o%0d.prmtop
  quit
-                    """ %(Output, HEH[idx],  HEH[idx]), file=open("o"+str(HEH[idx])+".inp", 'w'))
+                    """ %(HEH[idx],  HEH[idx]), file=open("o"+str(HEH[idx])+".inp", 'w'))
 
                     if (os.path.isfile("o%0d.prmtop" %(HEH[idx])) == False):
                         print("\n Generating oxidized topology for HEH-%0d ..." %(HEH[idx]))
@@ -953,11 +4181,11 @@ def DeltaGFromLIE(Output):
 
                 elif (state == "red"):
                     print("""
- parm %s.prmtop
+ parm RefState.prmtop
  changeRedoxState :%0d 1
  outparm r%0d.prmtop
  quit
-                    """ %(Output, HEH[idx],  HEH[idx]), file=open("r"+str(HEH[idx])+".inp", 'w'))
+                    """ %(HEH[idx],  HEH[idx]), file=open("r"+str(HEH[idx])+".inp", 'w'))
 
                     if (os.path.isfile("r%0d.prmtop" %(HEH[idx])) == False):
                         print(" Generating reduced topology for HEH-%0d ..." %(HEH[idx]))
@@ -1178,6 +4406,460 @@ def DeltaGFromLIE(Output):
 
 ################################################################################################################################################
 
+################################################################################################################################################
+
+def DeltaGFromLIE_HemeB(Output, HemeType):
+
+    if (os.path.isfile(f"RefState.prmtop") == False):
+        print("""
+ Generating the reference state topology where all hemes
+ are in the reduced state.
+ """)
+        DefineRefState(Output, HemeType)
+    elif (os.path.isfile(f"RefState.prmtop") == True):
+        print("""
+ Found RefState.prmtop
+ """)
+
+    idx = 0
+    HisID = []; HebID = []; HEM = []
+    with open("BondDefinitions.txt") as f:
+        for line in f:
+            HisID.append(int(line.strip().split('.')[1]))
+            HebID.append(int(line.strip().split('.')[3]))
+
+    for i in range(0, len(HisID), 2):
+        HEM.append([HebID[i], HisID[i], HisID[i+1]])
+
+    for idx in range(len(HEM)):
+       #print(HEM[idx][0], HEM[idx][1], HEM[idx][2])
+        HEB = str(HEB[idx][0])+","+str(HEM[idx][1])+","+str(HEM[idx][2])
+
+        if (os.path.isfile("o%0d.prmtop" %(HEM[idx][0])) == False):
+            print("""
+parm RefState.prmtop""", file=open("o"+str(HEM[idx][0])+".inp", 'w'))
+
+            print(f"""
+netcharge :{HEM[idx][0]},{HEM[idx][1]},{HEM[idx][2]}
+change CHARGE :{HEM[idx][0]}&@FE         0.6083
+change CHARGE :{HEM[idx][0]}&@NA         0.1780
+change CHARGE :{HEM[idx][0]}&@C1A       -0.2990
+change CHARGE :{HEM[idx][0]}&@C2A        0.2176
+change CHARGE :{HEM[idx][0]}&@C3A       -0.0578
+change CHARGE :{HEM[idx][0]}&@CMA       -0.0653
+change CHARGE :{HEM[idx][0]}&@HMA1       0.0838
+change CHARGE :{HEM[idx][0]}&@HMA2       0.0416
+change CHARGE :{HEM[idx][0]}&@HMA3       0.1007
+change CHARGE :{HEM[idx][0]}&@C4A       -0.2008
+change CHARGE :{HEM[idx][0]}&@CHB       -0.1385
+change CHARGE :{HEM[idx][0]}&@HHB        0.3521
+change CHARGE :{HEM[idx][0]}&@C1B       -0.1639
+change CHARGE :{HEM[idx][0]}&@NB         0.1343
+change CHARGE :{HEM[idx][0]}&@C2B       -0.1095
+change CHARGE :{HEM[idx][0]}&@CMB        0.0161
+change CHARGE :{HEM[idx][0]}&@HMB1       0.0095
+change CHARGE :{HEM[idx][0]}&@HMB2       0.0688
+change CHARGE :{HEM[idx][0]}&@HMB3       0.0593
+change CHARGE :{HEM[idx][0]}&@C3B        0.1107
+change CHARGE :{HEM[idx][0]}&@CAB       -0.2074
+change CHARGE :{HEM[idx][0]}&@HAB        0.1943
+change CHARGE :{HEM[idx][0]}&@CBB       -0.4054
+change CHARGE :{HEM[idx][0]}&@HBB1       0.2192
+change CHARGE :{HEM[idx][0]}&@HBB2       0.1998
+change CHARGE :{HEM[idx][0]}&@C4B       -0.0043
+change CHARGE :{HEM[idx][0]}&@CHC       -0.2657
+change CHARGE :{HEM[idx][0]}&@HHC        0.2630
+change CHARGE :{HEM[idx][0]}&@C1C        0.1417
+change CHARGE :{HEM[idx][0]}&@NC         0.0897
+change CHARGE :{HEM[idx][0]}&@C2C       -0.0225
+change CHARGE :{HEM[idx][0]}&@CMC       -0.1841
+change CHARGE :{HEM[idx][0]}&@HMC1       0.1221
+change CHARGE :{HEM[idx][0]}&@HMC2       0.1268
+change CHARGE :{HEM[idx][0]}&@HMC3       0.0719
+change CHARGE :{HEM[idx][0]}&@C3C        0.0485
+change CHARGE :{HEM[idx][0]}&@CAC        0.0012
+change CHARGE :{HEM[idx][0]}&@HAC        0.1508
+change CHARGE :{HEM[idx][0]}&@CBC       -0.5097
+change CHARGE :{HEM[idx][0]}&@HBC1       0.2648
+change CHARGE :{HEM[idx][0]}&@HBC2       0.2618
+change CHARGE :{HEM[idx][0]}&@C4C       -0.2418
+change CHARGE :{HEM[idx][0]}&@CHD       -0.1909
+change CHARGE :{HEM[idx][0]}&@HHD        0.3192
+change CHARGE :{HEM[idx][0]}&@C1D       -0.0856
+change CHARGE :{HEM[idx][0]}&@ND         0.1145
+change CHARGE :{HEM[idx][0]}&@C2D       -0.0592
+change CHARGE :{HEM[idx][0]}&@CMD       -0.0045
+change CHARGE :{HEM[idx][0]}&@HMD1       0.0235
+change CHARGE :{HEM[idx][0]}&@HMD2       0.0942
+change CHARGE :{HEM[idx][0]}&@HMD3       0.0215
+change CHARGE :{HEM[idx][0]}&@C3D       -0.1936
+change CHARGE :{HEM[idx][0]}&@C4D        0.0685
+change CHARGE :{HEM[idx][0]}&@CHA       -0.1387
+change CHARGE :{HEM[idx][0]}&@HHA        0.3203
+change CHARGE :{HEM[idx][1]}&@CB         0.0590
+change CHARGE :{HEM[idx][1]}&@HB2        0.0431
+change CHARGE :{HEM[idx][1]}&@HB3        0.0431
+change CHARGE :{HEM[idx][1]}&@CG         0.0368
+change CHARGE :{HEM[idx][1]}&@ND1       -0.1361
+change CHARGE :{HEM[idx][1]}&@HD1        0.4020
+change CHARGE :{HEM[idx][1]}&@CE1       -0.1891
+change CHARGE :{HEM[idx][1]}&@HE1        0.2281
+change CHARGE :{HEM[idx][1]}&@NE2       -0.0977
+change CHARGE :{HEM[idx][1]}&@CD2       -0.2862
+change CHARGE :{HEM[idx][1]}&@HD2        0.2051
+change CHARGE :{HEM[idx][2]}&@CB        -0.0209
+change CHARGE :{HEM[idx][2]}&@HB2        0.0667
+change CHARGE :{HEM[idx][2]}&@HB3        0.0667
+change CHARGE :{HEM[idx][2]}&@CG        -0.0517
+change CHARGE :{HEM[idx][2]}&@ND1       -0.0005
+change CHARGE :{HEM[idx][2]}&@HD1        0.3810
+change CHARGE :{HEM[idx][2]}&@CE1       -0.3022
+change CHARGE :{HEM[idx][2]}&@HE1        0.2830
+change CHARGE :{HEM[idx][2]}&@NE2       -0.1741
+change CHARGE :{HEM[idx][2]}&@CD2       -0.2124
+change CHARGE :{HEM[idx][2]}&@HD2        0.2337
+change CHARGE :{HEM[idx][0]}&@CAA        0.1105
+change CHARGE :{HEM[idx][0]}&@HAA1       0.0269
+change CHARGE :{HEM[idx][0]}&@HAA2      -0.0203
+change CHARGE :{HEM[idx][0]}&@CBA       -0.0733
+change CHARGE :{HEM[idx][0]}&@HBA1       0.0006
+change CHARGE :{HEM[idx][0]}&@HBA2       0.0585
+change CHARGE :{HEM[idx][0]}&@CGA        0.5918
+change CHARGE :{HEM[idx][0]}&@O1A       -0.6537
+change CHARGE :{HEM[idx][0]}&@O2A       -0.6853
+change CHARGE :{HEM[idx][0]}&@CAD       -0.0291
+change CHARGE :{HEM[idx][0]}&@HAD1       0.0078
+change CHARGE :{HEM[idx][0]}&@HAD2       0.0658
+change CHARGE :{HEM[idx][0]}&@CBD        0.2827
+change CHARGE :{HEM[idx][0]}&@HBD1      -0.0293
+change CHARGE :{HEM[idx][0]}&@HBD2      -0.0436
+change CHARGE :{HEM[idx][0]}&@CGD        0.4783
+change CHARGE :{HEM[idx][0]}&@O1D       -0.6025
+change CHARGE :{HEM[idx][0]}&@O2D       -0.6098
+netcharge :{HEM[idx][0]},{HEM[idx][1]},{HEM[idx][2]}
+outparm o{HEM[idx][0]}.prmtop
+""", file=open("o"+str(HEM[idx][0])+".inp", 'a'))
+
+            print("\n Generating oxidized topology for HEB-%0d ..." %(HEM[idx][0]))
+            subprocess.run("parmed -i o"+str(HEM[idx][0])+".inp > r"+str(HEM[idx][0])+".log", shell=True)
+
+        if (os.path.isfile("r%0d.prmtop" %(HEM[idx][0])) == False):
+            print("""
+parm RefState.prmtop""", file=open("r"+str(HEM[idx][0])+".inp", 'w'))
+
+            print(f"""
+netcharge :{HEM[idx][0]},{HEM[idx][1]},{HEM[idx][2]}
+change CHARGE :{HEM[idx][0]}&@FE         0.4223
+change CHARGE :{HEM[idx][0]}&@NA         0.1973
+change CHARGE :{HEM[idx][0]}&@C1A       -0.3489
+change CHARGE :{HEM[idx][0]}&@C2A        0.2187
+change CHARGE :{HEM[idx][0]}&@C3A       -0.0877
+change CHARGE :{HEM[idx][0]}&@CMA       -0.0598
+change CHARGE :{HEM[idx][0]}&@HMA1       0.0703
+change CHARGE :{HEM[idx][0]}&@HMA2       0.0281
+change CHARGE :{HEM[idx][0]}&@HMA3       0.0872
+change CHARGE :{HEM[idx][0]}&@C4A       -0.2107
+change CHARGE :{HEM[idx][0]}&@CHB       -0.1614
+change CHARGE :{HEM[idx][0]}&@HHB        0.3441
+change CHARGE :{HEM[idx][0]}&@C1B       -0.1858
+change CHARGE :{HEM[idx][0]}&@NB         0.1413
+change CHARGE :{HEM[idx][0]}&@C2B       -0.0884   
+change CHARGE :{HEM[idx][0]}&@CMB        0.0466
+change CHARGE :{HEM[idx][0]}&@HMB1      -0.0146
+change CHARGE :{HEM[idx][0]}&@HMB2       0.0447
+change CHARGE :{HEM[idx][0]}&@HMB3       0.0352
+change CHARGE :{HEM[idx][0]}&@C3B        0.0348
+change CHARGE :{HEM[idx][0]}&@CAB       -0.2072
+change CHARGE :{HEM[idx][0]}&@HAB        0.1898
+change CHARGE :{HEM[idx][0]}&@CBB       -0.4301
+change CHARGE :{HEM[idx][0]}&@HBB1       0.2165
+change CHARGE :{HEM[idx][0]}&@HBB2       0.1971
+change CHARGE :{HEM[idx][0]}&@C4B       -0.0142
+change CHARGE :{HEM[idx][0]}&@CHC       -0.2576
+change CHARGE :{HEM[idx][0]}&@HHC        0.2520
+change CHARGE :{HEM[idx][0]}&@C1C        0.0528
+change CHARGE :{HEM[idx][0]}&@NC         0.1307
+change CHARGE :{HEM[idx][0]}&@C2C        0.0116
+change CHARGE :{HEM[idx][0]}&@CMC       -0.1501
+change CHARGE :{HEM[idx][0]}&@HMC1       0.0991
+change CHARGE :{HEM[idx][0]}&@HMC2       0.1038
+change CHARGE :{HEM[idx][0]}&@HMC3       0.0489
+change CHARGE :{HEM[idx][0]}&@C3C        0.0046
+change CHARGE :{HEM[idx][0]}&@CAC       -0.0156
+change CHARGE :{HEM[idx][0]}&@HAC        0.1293
+change CHARGE :{HEM[idx][0]}&@CBC       -0.5384
+change CHARGE :{HEM[idx][0]}&@HBC1       0.2611
+change CHARGE :{HEM[idx][0]}&@HBC2       0.2581
+change CHARGE :{HEM[idx][0]}&@C4C       -0.2427
+change CHARGE :{HEM[idx][0]}&@CHD       -0.2138
+change CHARGE :{HEM[idx][0]}&@HHD        0.3122
+change CHARGE :{HEM[idx][0]}&@C1D       -0.0975
+change CHARGE :{HEM[idx][0]}&@ND         0.1255
+change CHARGE :{HEM[idx][0]}&@C2D       -0.0861
+change CHARGE :{HEM[idx][0]}&@CMD        0.0005
+change CHARGE :{HEM[idx][0]}&@HMD1       0.0098
+change CHARGE :{HEM[idx][0]}&@HMD2       0.0805
+change CHARGE :{HEM[idx][0]}&@HMD3       0.0078
+change CHARGE :{HEM[idx][0]}&@C3D       -0.1965
+change CHARGE :{HEM[idx][0]}&@C4D        0.0236
+change CHARGE :{HEM[idx][0]}&@CHA       -0.1216
+change CHARGE :{HEM[idx][0]}&@HHA        0.3063
+change CHARGE :{HEM[idx][1]}&@CB         0.0426
+change CHARGE :{HEM[idx][1]}&@HB2        0.0349
+change CHARGE :{HEM[idx][1]}&@HB3        0.0349
+change CHARGE :{HEM[idx][1]}&@CG         0.0408
+change CHARGE :{HEM[idx][1]}&@ND1       -0.1881
+change CHARGE :{HEM[idx][1]}&@HD1        0.3920
+change CHARGE :{HEM[idx][1]}&@CE1       -0.1901
+change CHARGE :{HEM[idx][1]}&@HE1        0.2191
+change CHARGE :{HEM[idx][1]}&@NE2       -0.0847
+change CHARGE :{HEM[idx][1]}&@CD2       -0.3012
+change CHARGE :{HEM[idx][1]}&@HD2        0.2011
+change CHARGE :{HEM[idx][2]}&@CB        -0.0373
+change CHARGE :{HEM[idx][2]}&@HB2        0.0585
+change CHARGE :{HEM[idx][2]}&@HB3        0.0585
+change CHARGE :{HEM[idx][2]}&@CG        -0.0477
+change CHARGE :{HEM[idx][2]}&@ND1       -0.0525
+change CHARGE :{HEM[idx][2]}&@HD1        0.3710
+change CHARGE :{HEM[idx][2]}&@CE1       -0.3032
+change CHARGE :{HEM[idx][2]}&@HE1        0.2740
+change CHARGE :{HEM[idx][2]}&@NE2       -0.1611
+change CHARGE :{HEM[idx][2]}&@CD2       -0.2274
+change CHARGE :{HEM[idx][2]}&@HD2        0.2297
+change CHARGE :{HEM[idx][0]}&@CAA        0.1105
+change CHARGE :{HEM[idx][0]}&@HAA1       0.0269
+change CHARGE :{HEM[idx][0]}&@HAA2      -0.0203
+change CHARGE :{HEM[idx][0]}&@CBA       -0.0733
+change CHARGE :{HEM[idx][0]}&@HBA1       0.0006
+change CHARGE :{HEM[idx][0]}&@HBA2       0.0585
+change CHARGE :{HEM[idx][0]}&@CGA        0.5918
+change CHARGE :{HEM[idx][0]}&@O1A       -0.6537
+change CHARGE :{HEM[idx][0]}&@O2A       -0.6853
+change CHARGE :{HEM[idx][0]}&@CAD       -0.0291
+change CHARGE :{HEM[idx][0]}&@HAD1       0.0078
+change CHARGE :{HEM[idx][0]}&@HAD2       0.0658
+change CHARGE :{HEM[idx][0]}&@CBD        0.2827
+change CHARGE :{HEM[idx][0]}&@HBD1      -0.0293
+change CHARGE :{HEM[idx][0]}&@HBD2      -0.0436
+change CHARGE :{HEM[idx][0]}&@CGD        0.4783
+change CHARGE :{HEM[idx][0]}&@O1D       -0.6025
+change CHARGE :{HEM[idx][0]}&@O2D       -0.6098
+netcharge :{HEM[idx][0]},{HEM[idx][1]},{HEM[idx][2]}
+outparm r{HEM[idx][0]}.prmtop
+""", file=open("r"+str(HEM[idx][0])+".inp", 'a'))
+
+            print(" Generating reduced topology for HEH-%0d ..." %(HEM[idx][0]))
+            subprocess.run("parmed -i r"+str(HEM[idx][0])+".inp > r"+str(HEM[idx][0])+".log", shell=True)
+
+            if (os.path.isfile("%0dphsicochemAvg.dat" %(HEM[idx][0])) == True):
+                print(""" 
+ Found %0dphsicochemAvg.dat from a prior execution.
+ This prior output will be used for the analysis.""" %(HEH[idx])) 
+
+            if (os.path.isfile("%0dphsicochemAvg.dat" %(HEM[idx][0])) == False):
+                if (os.path.isfile("o%0d.prmtop" %(HEM[idx][0])) == True) and (os.path.isfile("r%0d.prmtop" %(HEM[idx][0])) == True): 
+                    print("""
+ parm   o%0d.prmtop""".format(HEM[idx][0]), file=open("%0dredox.in" %(HEM[idx][0]), 'w'))
+
+                    print(f"""
+ trajin min.pdb parmindex 0
+
+ lie OHSys      :({HEB})        !:({HEB})                        out  OHSys.dat
+ lie OHP        :({HEB})        !(:{HEB},WAT,Na+,Cl-)            out  OHP.dat
+ lie OHS        :({HEB})        :WAT,Na+,Cl-                     out  OHS.dat
+ lie OHNonPolar :({HEB})        :GLY,ALA,VAL,LEU,ILE,MET,PRO     out  OHNonPolar.dat
+ lie OHAromatic :({HEB})        :PHE,TYR,TRP                     out  OHAromatic.dat
+ lie OHPolar    :({HEB})        :SER,THR,CYS,CYO,ASN,GLN         out  OHPolar.dat
+ lie OHAcidic   :({HEB})        :ASP,AS4,GLU,GL4                 out  OHAcidic.dat 
+ lie OHBasic    :({HEB})        :HIS,HIP,HID,HIE,HIO,LYS,ARG     out  OHBasic.dat 
+ lie OHHEB      :({HEB})        :HEM,HIM,HIN&!:{HEB}                  out  OHHEB.dat 
+ run
+
+ clear trajin
+                    """ %{'HEB': HEB}, file=open("%0dredox.in" %(HEM[idx][0]), 'a'))
+
+                    print("""
+ parm   r%0d.prmtop""".format(HEM[idx][0]), file=open("%0dredox.in" %(HEM[idx][0]), 'a'))
+
+                    print(f"""
+ trajin min.pdb parmindex 1
+
+ lie RHSys      :({HEB})        !:{HEB}                          out  RHSys.dat
+ lie RHP        :({HEB})        !(:{HEB},WAT,Na+,Cl-)            out  RHP.dat
+ lie RHS        :({HEB})        :WAT,Na+,Cl-                     out  RHS.dat
+ lie RHNonPolar :({HEB})        :GLY,ALA,VAL,LEU,ILE,MET,PRO     out  RHNonPolar.dat
+ lie RHAromatic :({HEB})        :PHE,TYR,TRP                     out  RHAromatic.dat
+ lie RHPolar    :({HEB})        :SER,THR,CYS,CYO,ASN,GLN         out  RHPolar.dat
+ lie RHAcidic   :({HEB})        :ASP,AS4,GLU,GL4                 out  RHAcidic.dat 
+ lie RHBasic    :({HEB})        :HIS,HIP,HID,HIE,HIO,LYS,ARG     out  RHBasic.dat 
+ lie RHHEB      :({HEB})        :HEB&!:{HEB}                     out  RHHEB.dat 
+ run
+#-----------------------------------------------------------------------------------
+
+ ODHSys      = avg(OHSys[EELEC])      * 0.043 
+ ODHP        = avg(OHP[EELEC])        * 0.043 
+ ODHS        = avg(OHS[EELEC])        * 0.043
+ ODHNonPolar = avg(OHNonPolar[EELEC]) * 0.043
+ ODHAromatic = avg(OHAromatic[EELEC]) * 0.043
+ ODHPolar    = avg(OHPolar[EELEC])    * 0.043
+ ODHAcidic   = avg(OHAcidic[EELEC])   * 0.043
+ ODHBasic    = avg(OHBasic[EELEC])    * 0.043
+ ODHHEB      = avg(OHHEB[EELEC])      * 0.043
+
+ RDHSys      = avg(RHSys[EELEC])      * 0.043 
+ RDHP        = avg(RHP[EELEC])        * 0.043 
+ RDHS        = avg(RHS[EELEC])        * 0.043
+ RDHNonPolar = avg(RHNonPolar[EELEC]) * 0.043
+ RDHAromatic = avg(RHAromatic[EELEC]) * 0.043
+ RDHPolar    = avg(RHPolar[EELEC])    * 0.043
+ RDHAcidic   = avg(RHAcidic[EELEC])   * 0.043
+ RDHBasic    = avg(RHBasic[EELEC])    * 0.043
+ RDHHEB      = avg(RHHEB[EELEC])      * 0.043
+
+ DHSys          = (avg(OHSys[EELEC])      - avg(RHSys[EELEC]))      * 0.043    
+ DHP            = (avg(OHP[EELEC])        - avg(RHP[EELEC]))        * 0.043 
+ DHS            = (avg(OHS[EELEC])        - avg(RHS[EELEC]))        * 0.043 
+ DHNonPolar     = (avg(OHNonPolar[EELEC]) - avg(RHNonPolar[EELEC])) * 0.043    
+ DHAromatic     = (avg(OHAromatic[EELEC]) - avg(RHAromatic[EELEC])) * 0.043 
+ DHPolar        = (avg(OHPolar[EELEC])    - avg(RHPolar[EELEC]))    * 0.043    
+ DHAcidic       = (avg(OHAcidic[EELEC])   - avg(RHAcidic[EELEC]))   * 0.043 
+ DHBasic        = (avg(OHBasic[EELEC])    - avg(RHBasic[EELEC]))    * 0.043
+ DHHEB          = (avg(OHHEB[EELEC])      - avg(RHHEB[EELEC]))      * 0.043
+
+ #DHSysstd       = stdev(DHSys)       * 0.043    
+ #DHPstd         = stdev(DHP)         * 0.043 
+ #DHSstd         = stdev(DHS)         * 0.043 
+ #DHNonPolarstd  = stdev(DHNonPolar)  * 0.043
+ #DHAromaticstd  = stdev(DHAromatic)  * 0.043 
+ #DHPolarstd     = stdev(DHPolar)     * 0.043 
+ #DHAcidicstd    = stdev(DHAcidic)    * 0.043 
+ #DHBasicstd     = stdev(DHBasic)     * 0.043 
+ #DHHEBstd       = stdev(DHHEB)       * 0.043
+ #DHPRNstd       = stdev(DHPRN)       * 0.043
+ #writedata %(HEB)0dphsicochemStd.dat DHSysstd DHPstd DHSstd DHNonPolarstd DHAromaticstd DHPolarstd DHAcidicstd DHBasicstd DHHEBstd DHPRNstd 
+ #printdata DHSysstd DHPstd DHSstd DHNonPolarstd DHAromaticstd DHPolarstd DHAcidicstd DHBasicstd DHHEBstd DHPRNstd 
+
+ printdata ODHSys RDHSys DHSys ODHP RDHP DHP ODHS RDHS DHS ODHNonPolar RDHNonPolar DHNonPolar ODHAromatic RDHAromatic DHAromatic ODHPolar RDHPolar DHPolar ODHAcidic RDHAcidic DHAcidic ODHBasic RDHBasic DHBasic ODHHEB RDHHEB DHHEB 
+ writedata %(HEB)0dphsicochemAvg.dat ODHSys RDHSys DHSys ODHP RDHP DHP ODHS RDHS DHS ODHNonPolar RDHNonPolar DHNonPolar ODHAromatic RDHAromatic DHAromatic ODHPolar RDHPolar DHPolar ODHAcidic RDHAcidic DHAcidic ODHBasic RDHBasic DHBasic ODHHEB RDHHEB DHHEB 
+                    """ %{'HEB': HEB}, file=open("%0dredox.in" %(HEM[idx][0]), 'a'))
+                    print(" Running LIE calculation for Oxidation of HEB-%0d ..." %(HEM[idx][0]))
+                    subprocess.run("cpptraj -i "+str(HEM[idx][0])+"redox.in > "+str(HEM[idx][0])+"redox.log", shell=True)
+
+                else:
+                    print(""" o%0d.prmtop and/or r%0d.prmtop are missing and we can not proceed. Something went wrong.""" %(HEM[idx][0], HEM[idx][0]))
+
+        idx += 1
+
+    ODHSys = [0]*(len(HEM))
+    RDHSys = [0]*(len(HEM))
+    DHSys = [0]*(len(HEM))
+
+    ODHP = [0]*(len(HEM))
+    RDHP = [0]*(len(HEM))
+    DHP = [0]*(len(HEM))
+
+    ODHS = [0]*(len(HEM))
+    RDHS = [0]*(len(HEM))
+    DHS = [0]*(len(HEM))
+
+    ODHNonPolar = [0]*(len(HEM))
+    RDHNonPolar = [0]*(len(HEM))
+    DHNonPolar = [0]*(len(HEM))
+
+    ODHAromatic = [0]*(len(HEM))
+    RDHAromatic = [0]*(len(HEM))
+    DHAromatic = [0]*(len(HEM))
+
+    ODHPolar = [0]*(len(HEM))
+    RDHPolar = [0]*(len(HEM))
+    DHPolar = [0]*(len(HEM))
+
+    ODHAcidic = [0]*(len(HEM))
+    RDHAcidic = [0]*(len(HEM))
+    DHAcidic = [0]*(len(HEM))
+
+    ODHBasic = [0]*(len(HEM))
+    RDHBasic = [0]*(len(HEM))
+    DHBasic = [0]*(len(HEM))
+
+    ODHHEM = [0]*(len(HEM))
+    RDHHEM = [0]*(len(HEM))
+    DHHEM = [0]*(len(HEM))
+
+    DG = [0]*(len(HEH)-1)
+
+    for idx in range(len(HEM)):
+        print("\n Result for HEB-%0d:" %(HEM[idx][0]))
+
+        with open("%0dphsicochemAvg.dat" %(HEM[idx][0]), 'r') as fp:
+            LinesNumToRead = [1]
+            LinesToRead = []*len(LinesNumToRead)
+            for i, line in enumerate(fp):
+                if i in LinesNumToRead:
+                    LinesToRead.append(line.strip())
+
+                    ODHSys[idx] = float(LinesToRead[0].split()[1])
+                    RDHSys[idx] = float(LinesToRead[0].split()[2])
+                    DHSys[idx] = float(LinesToRead[0].split()[3])
+                    print("  Full System: %8.3f %8.3f %8.3f" %(ODHSys[idx], RDHSys[idx], DHSys[idx]))
+            
+                    ODHP[idx] = float(LinesToRead[0].split()[4])
+                    RDHP[idx] = float(LinesToRead[0].split()[5])
+                    DHP[idx] = float(LinesToRead[0].split()[6])
+                    print("      Protein: %8.3f %8.3f %8.3f" %(ODHP[idx], RDHP[idx], DHP[idx]))
+
+                    ODHS[idx] = float(LinesToRead[0].split()[7])
+                    RDHS[idx] = float(LinesToRead[0].split()[8])
+                    DHS[idx] = float(LinesToRead[0].split()[9])
+                    print("      Solvent: %8.3f %8.3f %8.3f" %(ODHS[idx], RDHS[idx], DHS[idx]))
+
+                    ODHNonPolar[idx] = float(LinesToRead[0].split()[10])
+                    RDHNonPolar[idx] = float(LinesToRead[0].split()[11])
+                    DHNonPolar[idx] = float(LinesToRead[0].split()[12])
+                    print("    Non-Polar: %8.3f %8.3f %8.3f" %(ODHNonPolar[idx], RDHNonPolar[idx], DHNonPolar[idx]))
+
+                    ODHAromatic[idx] = float(LinesToRead[0].split()[13])
+                    RDHAromatic[idx] = float(LinesToRead[0].split()[14])
+                    DHAromatic[idx] = float(LinesToRead[0].split()[15])
+                    print("     Aromatic: %8.3f %8.3f %8.3f" %(ODHAromatic[idx], RDHAromatic[idx], DHAromatic[idx]))
+
+                    ODHPolar[idx] = float(LinesToRead[0].split()[16])
+                    RDHPolar[idx] = float(LinesToRead[0].split()[17])
+                    DHPolar[idx] = float(LinesToRead[0].split()[18])
+                    print("        Polar: %8.3f %8.3f %8.3f" %(ODHPolar[idx], RDHPolar[idx], DHPolar[idx]))
+
+                    ODHAcidic[idx] = float(LinesToRead[0].split()[19])
+                    RDHAcidic[idx] = float(LinesToRead[0].split()[20])
+                    DHAcidic[idx] = float(LinesToRead[0].split()[21])
+                    print("       Acidic: %8.3f %8.3f %8.3f" %(ODHAcidic[idx], RDHAcidic[idx], DHAcidic[idx]))
+
+                    ODHBasic[idx] = float(LinesToRead[0].split()[22])
+                    RDHBasic[idx] = float(LinesToRead[0].split()[23])
+                    DHBasic[idx] = float(LinesToRead[0].split()[24])
+                    print("        Basic: %8.3f %8.3f %8.3f" %(ODHBasic[idx], RDHBasic[idx], DHBasic[idx]))
+
+                    ODHHEM[idx] = float(LinesToRead[0].split()[25])
+                    RDHHEM[idx] = float(LinesToRead[0].split()[26])
+                    DHHEM[idx] = float(LinesToRead[0].split()[27])
+                    print("  Other Hemes: %8.3f %8.3f %8.3f" %(ODHHEM[idx], RDHHEM[idx], DHHEM[idx]))
+
+                elif i > 1:
+                    break
+
+    for idx in range(len(HEH)-1):
+        DG[idx] = -1 * ((-1 * DHSys[idx]) + (DHSys[idx+1])) 
+
+        if (idx == 0):
+            print("(HEH-%0d = %.3f eV) -> (HEH-%0d = %.3f eV); DG = %10.3f eV" %(HEH[idx],  DHSys[idx], HEH[idx+1], DHSys[idx+1], DG[idx]), file=open('DG.txt', 'w'))
+        else:
+            print("(HEH-%0d = %.3f eV) -> (HEH-%0d = %.3f eV); DG = %10.3f eV" %(HEH[idx],  DHSys[idx], HEH[idx+1], DHSys[idx+1], DG[idx]), file=open('DG.txt', 'a'))
+
+    return DG
+
+################################################################################################################################################
+
+################################################################################################################################################
+
 def AssignCouplingFromGeom(Output):
 
     idx = 0
@@ -1222,10 +4904,17 @@ def AssignCouplingFromGeom(Output):
             for line in Lines:
                 if (lc == 1):
                     ang[idx] = float(line.strip().split()[1])
-                    if (ang[idx] < 45):
-                        Hda[idx] = 8.0
-                    elif (ang[idx] >= 45):
-                        Hda[idx] = 2.0
+                    if (ang[idx] > 90):
+                        ang[idx] = 180 - ang[idx]
+                        if (ang[idx] < 45):
+                            Hda[idx] = 8.0
+                        elif (ang[idx] >= 45):
+                            Hda[idx] = 2.0
+                    if (ang[idx] <= 90):
+                        if (ang[idx] < 45):
+                            Hda[idx] = 8.0
+                        elif (ang[idx] >= 45):
+                            Hda[idx] = 2.0
                     else:
                         Hda[idx] = "?"
                 lc += 1
@@ -1241,6 +4930,83 @@ def AssignCouplingFromGeom(Output):
     print(" Done!")
 
     return Hda
+
+################################################################################################################################################
+
+################################################################################################################################################
+
+def AssignCouplingFromGeom_HemeB(Output):
+
+    HisID = []; HebID = []; HEM = []
+    with open("BondDefinitions.txt") as f:
+        for line in f:
+            HisID.append(int(line.strip().split('.')[1]))
+            HebID.append(int(line.strip().split('.')[3]))
+
+    for i in range(0, len(HisID), 2):
+        HEM.append([HebID[i], HisID[i], HisID[i+1]])
+    
+    ang = [0]*(len(HEM)-1)
+    Hda = [0]*(len(HEM)-1)
+    for idx in range(len(HEM)-1):
+        #print(HEM[idx][0], HEM[idx][1], HEM[idx][2])
+
+        print("""
+ parm    %s.prmtop
+ trajin  min.rst7
+ 
+ vector Hem%0d  corrplane :%0d&@FE,NA,C1A,C2A,C3A,C4A,CHB,C1B,NB,C2B,C3B,C4B,CHC,C1C,NC,C2C,C3C,C4C,CHD,C1D,ND,C2D,C3D,C4D,CHA
+ vector Hem%0d  corrplane :%0d&@FE,NA,C1A,C2A,C3A,C4A,CHB,C1B,NB,C2B,C3B,C4B,CHC,C1C,NC,C2C,C3C,C4C,CHD,C1D,ND,C2D,C3D,C4D,CHA
+ run
+ 
+ vectormath vec1 Hem%0d vec2 Hem%0d dotangle out hemplaneorient_%0d-%0d.dat
+ 
+ run
+ quit
+        """ %(Output, HEM[idx][0], HEM[idx][0], HEM[idx+1][0], HEM[idx+1][0], HEM[idx][0], HEM[idx+1][0], HEM[idx][0], HEM[idx+1][0]), file=open("CalcOrientation.in", "w"))
+
+        if (os.path.isfile("hemplaneorient_%0d-%0d.dat" %(HEM[idx][0], HEM[idx+1][0])) == True):
+            print(""" 
+ Found hemplaneorient_%0d-%0d.dat from a prior execution.
+ This prior output will be used for the analysis.""" %(HEM[idx][0], HEM[idx+1][0])) 
+
+        if (os.path.isfile("hemplaneorient_%0d-%0d.dat" %(HEM[idx][0], HEM[idx+1][0])) == False):
+            subprocess.run("cpptraj -i CalcOrientation.in > CalcOrientation.log", shell=True)
+
+        lc = 0
+        with open("hemplaneorient_%0d-%0d.dat" %(HEM[idx][0], HEM[idx+1][0])) as fp:
+            Lines = fp.readlines()
+            for line in Lines:
+                if (lc == 1):
+                    ang[idx] = float(line.strip().split()[1])
+                    if (ang[idx] > 90):
+                        ang[idx] = 180 - ang[idx]
+                        if (ang[idx] < 45):
+                            Hda[idx] = 8.0
+                        elif (ang[idx] >= 45):
+                            Hda[idx] = 2.0
+                    if (ang[idx] <= 90):
+                        if (ang[idx] < 45):
+                            Hda[idx] = 8.0
+                        elif (ang[idx] >= 45):
+                            Hda[idx] = 2.0
+                    else:
+                        Hda[idx] = "?"
+                lc += 1
+
+    print("\n Assiging coupling values based on inter-macrocycle planar anlge ... ")
+    for idx in range(len(HEM)-1):
+
+        if (idx == 0):
+            print("Hda(HEM-%0d <-> HEM-%0d) ang. = %10.3f deg.; Hda = %6.3f meV" %(HEM[idx][0],  HEM[idx+1][0], ang[idx], Hda[idx]), file=open('Hda.txt', 'w'))
+        else:
+            print("Hda(HEM-%0d <-> HEM-%0d) ang. = %10.3f deg.; Hda = %6.3f meV" %(HEM[idx][0],  HEM[idx+1][0], ang[idx], Hda[idx]), file=open('Hda.txt', 'a'))
+
+    print(" Done!")
+
+    return Hda
+
+################################################################################################################################################
 
 ################################################################################################################################################
 
@@ -1277,16 +5043,37 @@ def ComputeMarcusRates(Hda, Lambda, DG):
         Reverse: %.3E\n""" %(idx, Eactf[idx], Eactb[idx], ketf[idx], ketb[idx]), end=" ")
 
         if (idx == 0):
-            print("%.3E,%3E" %(ketf[idx], ketb[idx]), file=open("rates.txt", "w"))
+            print("ketf,ketb", file=open("rates.txt", "w"))
+            print("%.3E,%3E" %(ketf[idx], ketb[idx]), file=open("rates.txt", "a"))
         else:
             print("%.3E,%3E" %(ketf[idx], ketb[idx]), file=open("rates.txt", "a"))
 
 ################################################################################################################################################
 
-def ComputeDiffusionCoefficient():
-    subprocess.run("make 2> /dev/null", shell=True)
-    subprocess.run("./derrida 2> /dev/null", shell=True)
+def ComputeDiffusionCoefficient(AvgHemeSpacing):
 
+    data = read_csv("rates.txt")
+    ketf = data['ketf'].tolist()
+    ketb = data['ketb'].tolist()
+    V,D = derrida.VD(ketf, ketb)
+    print("  Diffusion constant = %E cm^2/S"  % (D * ((AvgHemeSpacing)**2))) 
+    print("Diffusion constant = %E (cm^2/S)" % (D * ((AvgHemeSpacing)**2)), file=open('D.txt', 'w'))
+################################################################################################################################################
+
+def ComputeFlux():
+
+    data = read_csv("rates.txt")
+    ketf = data['ketf'].tolist()
+    ketb = data['ketb'].tolist()
+
+    Jf,Jb = blumberger.flux(ketf, ketb)
+    Javg = (Jf+Jb)/2
+
+    print("Forward Flux: %.2E" %(Jf)) 
+    print("Reverse Flux: %.2E" %(Jb))
+    print("Average forward/backward Flux: %.2E" %(Javg))
+
+    return Jf, Jb, Javg
 ################################################################################################################################################
 
 def MeasureSubunitLength():
@@ -1315,6 +5102,7 @@ def MeasureSubunitLength():
  exit
     """ %(HEH[0], HEH[x-1]), file=open("MeasureSubunitLength.tcl", "w"))
     subprocess.run("vmd -e MeasureSubunitLength.tcl > MeasureSubunitLength.log", shell=True)
+    #subprocess.run("/Applications/VMD\ 1.9.4a51-x86_64-Rev9.app/Contents/vmd/vmd_MACOSXX86_64 -e MeasureSubunitLength.tcl > MeasureSubunitLength.log", shell=True)
 
     with open("SubunitLength.txt") as fp:
         SubunitLength = float(fp.readline().strip().split()[5])
@@ -1323,26 +5111,150 @@ def MeasureSubunitLength():
 
 ################################################################################################################################################
 
-def ComputeRedoxCurrent():
+################################################################################################################################################
+
+def MeasureSubunitLength_HemeB():
+    HisID = []; HebID = []; HEM = []
+    with open("BondDefinitions.txt") as f:
+        for line in f:
+            HisID.append(int(line.strip().split('.')[1]))
+            HebID.append(int(line.strip().split('.')[3]))
+ 
+    for i in range(0, len(HisID), 2):
+        HEM.append([HebID[i], HisID[i], HisID[i+1]])
+
+    print("""
+ mol new min.pdb
+ set output [open  "SubunitLength.txt" w]
+
+ set FirstHeme [[atomselect top "resname HEB and resid %0d and name FE"] get index]
+ set LastHeme  [[atomselect top "resname HEB and resid %0d and name FE"] get index]
+
+ set dista  [measure bond [list $FirstHeme $LastHeme]]
+ set distcm [expr {$dista * 1E-8}]
+
+ puts $output "Proposed Subunit Length (cm) = $distcm"
+ exit
+    """ %(HEM[0][0], HEM[len(HEM)-1][0]), file=open("MeasureSubunitLength.tcl", "w"))
+    subprocess.run("vmd -e MeasureSubunitLength.tcl > MeasureSubunitLength.log", shell=True) 
+    #subprocess.run("/Applications/VMD\ 1.9.4a51-x86_64-Rev9.app/Contents/vmd/vmd_MACOSXX86_64 -e MeasureSubunitLength.tcl > MeasureSubunitLength.log", shell=True)
+
+    with open("SubunitLength.txt") as fp:
+        SubunitLength = float(fp.readline().strip().split()[5])
+
+    return SubunitLength
+
+################################################################################################################################################
+
+def MeasureAvgDist():
+    idx = 0
+    with open("LinearizedHemeSequence.txt") as fp:
+        x = len(fp.readlines())
+        HEH = [0]*x
+
+        fp.seek(0)
+        Lines = fp.readlines()
+        for line in Lines:
+            HEH[idx] = int(line.strip().split(" ")[1])
+            idx += 1
+
+    for idx in range(len(HEH)-1):
+        print(f"""
+parm BioDC.prmtop
+trajin min.rst7
+
+nativecontacts :{HEM[idx][0]}&(@FE,NA,C1A,C2A,C3A,C4A,CHB,C1B,NB,C2B,C3B,C4B,CHC,C1C,NC,C2C,C3C,C4C,CHD,C1D,ND,C2D,C3D,C4D,CHA) :{HEM[idx+1][0]}&(@FE,NA,C1A,C2A,C3A,C4A,CHB,C1B,NB,C2B,C3B,C4B,CHC,C1C,NC,C2C,C3C,C4C,CHD,C1D,ND,C2D,C3D,C4D,CHA) out HEM{HEM[idx][0]}-{HEM[idx+1][0]}_dist.dat mindist
+run
+        """, file=open(f"MeasureDistance_{HEM[idx][0]}-{HEM[idx+1][0]}.in", "w"))
+
+        subprocess.run(f"cpptraj -i MeasureDistance_{HEM[idx][0]}-{HEM[idx+1][0]}.in > MeasureDistance_{HEM[idx][0]}-{HEM[idx+1][0]}.log", shell=True)
+
+        with open(f"HEM{HEM[idx][0]}-{HEM[idx+1][0]}_dist.dat",'r') as fp:
+            Lines = fp.readlines()[1:]
+            for line in Lines:
+                dist[idx] = float(line.strip().split()[3])
+        
+        idx += 1
+    return dist
+
+################################################################################################################################################
+
+def MeasureAvgDist_HemeB():
+
+    HisID = []; HebID = []; HEM = []
+    with open("BondDefinitions.txt") as f:
+        for line in f:
+            HisID.append(int(line.strip().split('.')[1]))
+            HebID.append(int(line.strip().split('.')[3]))
+ 
+    for i in range(0, len(HisID), 2):
+        HEM.append([HebID[i], HisID[i], HisID[i+1]])
+
+    dist = [0]*(len(HEM)-1)
+    for idx in range(len(HEM)-1):
+        print(f"""
+parm BioDC.prmtop
+trajin min.rst7
+
+nativecontacts :{HEM[idx][0]}&(@FE,NA,C1A,C2A,C3A,CMA,C4A,CHB,C1B,NB,C2B,CMB,C3B,C4B,NC,C1C,C2C,CMC,C3C,C4C,ND,C2D,CMD,C3D,C4D) :{HEM[idx+1][0]}&(@FE,NA,C1A,C2A,C3A,CMA,C4A,CHB,C1B,NB,C2B,CMB,C3B,C4B,NC,C1C,C2C,CMC,C3C,C4C,ND,C2D,CMD,C3D,C4D) out HEM{HEM[idx][0]}-{HEM[idx+1][0]}_dist.dat mindist
+run
+        """, file=open(f"MeasureDistance_{HEM[idx][0]}-{HEM[idx+1][0]}.in", "w"))
+
+        subprocess.run(f"cpptraj -i MeasureDistance_{HEM[idx][0]}-{HEM[idx+1][0]}.in > MeasureDistance_{HEM[idx][0]}-{HEM[idx+1][0]}.log", shell=True)
+
+        with open(f"HEM{HEM[idx][0]}-{HEM[idx+1][0]}_dist.dat",'r') as fp:
+            Lines = fp.readlines()[1:]
+            for line in Lines:
+                dist[idx] = float(line.strip().split()[3])
+        
+        idx += 1
+    return dist
+
+################################################################################################################################################
+
+################################################################################################################################################
+
+def ComputeRedoxCurrent(HemeType):
 
     r=0.75E-7      #cm
+    c=3.00E10      #cm/s
     e=1.602E-19    #c
     kb=1.38E-23    #J/k
+    hbar=1.05E-34  #J/s 
+    deltabar=3     #cm^-1
 
     print(" Please provide the following parmaeters: ")
-    T = float(input("  Temperature (K)? "))
-    cps = int(input("  Number of Charges per subunit? "))
-    SubunitLength = MeasureSubunitLength()
-#   lsub = float(input("  Length of subunit (cm)? "))
-    lsub = SubunitLength
+    T    = float(input("  Temperature (K)? "))
+    cps    = int(input("  Number of charges per subunit? "))
+    #ahs  = float(input("  Average heme spacing (cm)? "))
+
+    if (HemeType == "b") or (HemeType == "B"):
+        ahs  = (round(sum(MeasureAvgDist_HemeB())/len(MeasureAvgDist_HemeB()), 3))*1E-8
+        print(f"  Average heme spacing is {ahs} cm")
+    if (HemeType == "c") or (HemeType == "C"):
+        ahs  = sum(MeasureAvgDist())/len(MeasureAvgDist())
+        print(f" Average heme spacing is {ahs} cm")
+
+    Ncnt = float(input("  Fewest number of contacts at either protein-electrode interface? "))
+    
+    DiffusionCoefficient = ComputeDiffusionCoefficient(ahs)
+    
+    if (HemeType == "c") or (HemeType == "C"):
+        SubunitLength = MeasureSubunitLength()
+    if (HemeType == "b") or (HemeType == "B"):
+        SubunitLength = MeasureSubunitLength_HemeB()
+
     print(""" 
  The length of a subunit of the cytochrome polymer is needed.
   The subunit length measured between the first and the last heme
   specified in LinearizedHemeSequence.txt is %.2E \n""" %(SubunitLength))
 
+#   lsub = float(input("  Length of subunit (cm)? "))
+    lsub = SubunitLength
+
     lw = float(input("  Length of wire (cm)? "))
-    Gexp = float(input("""  Experimental Conductance (S/cm) ? \n   (Enter "0" if not known)         """))
-    
+    Gexp = float(input("""  Experimental Conductance (S) ? \n   (Enter "0" if not known)         """))
+
     if (os.path.isfile("D.txt") == True):
         with open("D.txt") as fp:
             Dcalc = float(fp.readline().strip().split()[3])
@@ -1350,15 +5262,93 @@ def ComputeRedoxCurrent():
     cpsul = ((cps)/(lsub))
     csa = (math.pi * (r)**2) 
     crgden = (cpsul)/(csa)
-    Dexp = ((Gexp * kb * T * lw) / (csa * crgden * (e)**2))
+
+    if (Gexp == "") or (Gexp == 0):
+        V = 0.1
+    else:
+        V = ((1E12)*(e))/Gexp
+
+    k_dif = (Dcalc)/((ahs)**2)
+    u_dif = (Dcalc)*(e/(kb*T))
+    s_dif = e*(crgden)*(u_dif)
+    j_dif = ((s_dif*csa)/(e*Ncnt*lw))*(V)
+
+    s_flx = ((Javg*e*Ncnt*lw)/(V*csa)) 
+    u_flx = s_flx/((e)*(crgden))
+    d_flx = ((kb*T)/(e))*(u_flx)
+    k_flx = (d_flx)/((ahs)**2)
+
+    u_bt = ((e)*(ahs**2))/(2*hbar)
+    d_bt = ((kb*T)/(e))*(u_bt)
+    k_bt = (d_bt)/((ahs)**2)
+    s_bt = (e)*(crgden)*(u_bt)
+    j_bt = ((s_bt*csa)/(e*Ncnt*lw))*(V)
+
+    u_hp = (((2)*(math.pi)*(c)*(e)*(ahs**2))/((kb)*(T)))*(deltabar)
+    d_hp = ((kb*T)/(e))*(u_hp)
+    k_hp = (d_hp)/((ahs)**2)
+    s_hp = (e)*(crgden)*(u_hp)
+    j_hp = ((s_hp*csa)/(e*Ncnt*lw))*(V)
+
+    if (Gexp != "") or (Gexp != "0"):
+        s_exp = Gexp*(lw/csa)
+        j_exp = ((s_exp*csa)/(e*Ncnt*lw))*(V)
+        u_exp = s_exp/((e)*(crgden))
+        d_exp = ((Gexp * kb * T * lw) / (csa * crgden * (e)**2))
+        k_exp = (d_exp)/((ahs)**2)
 
     print("""
- Charge per Subunit Length          = %e q/cm 
- Cross-Sectional Area               = %e cm^2
- Charge Density                     = %e q/cm^2
- Experimental Diffusion Constant    = %e cm^2/s
- Computed Diffusion Constant        = %e cm^2/s
-    """ %(cpsul, csa, crgden, Dexp, Dcalc))
+ Entered Quantities 
+   Temperature                                       = %.1f K    
+   Average Heme Spacing                              = %e cm
+   Charge per Subunit Length                         = %e q/cm 
+   Length of Filament                                = %e cm 
+   Fewest number of protein-electrode contacts       = %e cm 
+   Experimental Conductance                          = %s S
+
+ Computed Quantities 
+   1) Structure Properties:
+        Cross-Sectional Area                         = %e cm^2
+        Charge Density                               = %e q/cm^2
+
+   2) Single Particle Diffusion Model
+        Diffusion Constant                           = %e cm^2/s
+        Homogenious Chain Hopping Rate               = %e s^-1
+        Charge Mobility                              = %e cm^2/Vs
+        Conductivity                                 = %e S/cm
+        Flux at %.1f V                               = %e electrons/s
+
+   3) Multi-Particle Steady-State Model
+        Diffusion Constant                           = %e cm^2/s
+        Homogenious Chain Hopping Rate               = %e s^-1
+        Charge Mobility                              = %e cm^2/Vs
+        Conductivity                                 = %e S/cm
+        Flux at %.1f V                               = %e electrons/s
+
+   4) Band Theory Minimum Requirements
+        Diffusion Constant                           = %e cm^2/s
+        Hopping Rate                                 = %e s^-1
+        Charge Mobility                              = %e cm^2/Vs
+        Conductivity                                 = %e S/cm
+        Flux at %.1f V                               = %e electrons/s
+
+   5) Hopping Rate Maximum Limits
+        Diffusion Constant                           = %e cm^2/s
+        Hopping Rate                                 = %e s^-1
+        Charge Mobility                              = %e cm^2/Vs
+        Conductivity                                 = %e S/cm
+        Flux at at %.1f V                            = %e electrons/s
+    """ %(T, ahs, cps, lw, Ncnt, Gexp, csa, crgden, Dcalc, k_dif, u_dif, s_dif, V, j_dif, d_flx, k_flx, u_flx, s_flx, V, Javg, d_bt, k_bt, u_bt, s_bt, V, j_bt, d_hp, k_hp, u_hp, s_hp, V, j_hp)) 
+
+    if (Gexp != 0):
+        print("""
+   6) Experiment-Based Quantities
+        Diffusion Constant                           = %e cm^2/s
+        Hopping Rate                                 = %e s^-1
+        Charge Mobility                              = %e cm^2/Vs
+        Conductivity                                 = %e S/cm
+        Flux at %.1f V                               = %e electrons/s
+        """ %(d_exp, k_exp, u_exp, s_exp, V, j_exp)) 
 
     print(" %6s %8s %8s" %("Voltage (V)", "Exp. Current (pA)", "Computed Current (pA)"))
     for V in np.arange (-0.5, 0.5, 0.05):
@@ -1376,15 +5366,12 @@ print("""
               (polymeric) multi-heme cytochormes 
 
             Written by Matthew J. Guberman-Pfeffer
-                Last Updated: 06/02/2023
+                Last Updated: 10/30/2023
 
- This research was supported by the National Institute of General 
- Medical Sciences of the National Institutes of Health under award
- 1F32GM142247-01A1.
  ================================================================== 
 
  BioDC presents a highly modular workflow that has three 
- large divisions: 
+ major divisions: 
     (1) Structure Preparaiton & Relaxation
     (2) Energetic Estimation
     (3) Redox Current Prediction
@@ -1411,12 +5398,89 @@ if (DivSel == 0) or (DivSel == 1):
  ===================================================================  
     """, end=" ")
 
-    CheckProgInPath()
-    PDB = InitialStructureSelection()
-    CreateResIndexing(PDB)
-    ProcessPDB(PDB)
-    Output, Solv = ReBuildStructure(PDB)
-    StructRelax(Output, Solv)
+    print("""
+ We will ask a series of questions about your structure
+ in order to preperly prepare it. 
+    """, end=" ")
+
+    PDB = Initialization()
+
+    while True:
+        SelDisulfides = input("\n Are there disulfide linkages in your structure (yes/no)? ") 
+        if (SelDisulfides == "YES") or (SelDisulfides == "Yes") or (SelDisulfides == "yes") or (SelDisulfides == "Y") or (SelDisulfides == "y"):
+            DisulfList, DisulfArray = SelectDisulfides()
+            break
+        elif (SelDisulfides == "NO") or (SelDisulfides == "No") or (SelDisulfides == "no") or (SelDisulfides == "N") or (SelDisulfides == "n"):
+            DisulfList = " " 
+            DisulfArray = []   
+            print(" No disulfide linkages will be present in the prepared structure.")
+            break
+        else:
+            print(" Sorry, I didn't understand your response.")
+
+    while True:
+        ChooseMut = input("\n Would you like to mutate a residue? ")
+
+        if (ChooseMut == "YES") or (ChooseMut == "Yes") or (ChooseMut == "yes") or (ChooseMut == "Y") or (ChooseMut == "y"):
+            PDB = Mutate(PDB)
+            break
+        elif (ChooseMut == "NO") or (ChooseMut == "No") or (ChooseMut == "no") or (ChooseMut == "N") or (ChooseMut == "n"):
+            print(" Structure will not be mutated.")
+            break
+        else:
+            print(" Sorry, I didn't understand your response.")
+
+    print("""
+ Different parameters need to be applied for b- and c-type hemes. 
+ Presently, only structures with all bis-histidine-ligated b- or all 
+ bis-histidine-ligated c-type hemes can be analyzed.""")
+
+    while True:
+        HemeType = input("\n Which type (b or c) does your structure contain? ")
+
+        if (HemeType == "c") or (HemeType == "C"):
+            while True:
+                SelASPIDs = " "
+                SelGLUIDs = " "
+                SelHISIDs = " "
+                SelLYSIDs = " "
+                SelTYRIDs = " "
+
+                SelCpH = input(f""" 
+ Do you intend to run molecular dynamics where
+ pH active residues are titrated (yes/no)? """)
+
+                if (SelCpH == "YES") or (SelCpH == "Yes") or (SelCpH == "yes") or (SelCpH == "Y") or (SelCpH == "y"):
+                    SelASPIDs, SelGLUIDs, SelHISIDs, SelLYSIDs, SelTYRIDs = SelectpHActiveSites(PDB)
+                    break
+                elif (SelCpH == "NO") or (SelCpH == "No") or (SelCpH == "no") or (SelCpH == "N") or (SelCpH == "n"):
+                    print(""" No residues n the prepared structure will be titratable 
+ if you decide to run molecular dynamics.""")
+                    break
+                else:
+                    print(" Sorry, I didn't understand your response.")
+
+            CreateResIndexing(PDB)
+            ProcessPDB(PDB)
+            Output, Solv = ReBuildStructure(PDB)
+            StructRelax(Output, Solv)
+            break
+
+        elif (HemeType == "b") or (HemeType == "B"):
+            if (os.path.isfile("hemeb.lib") == True) and (os.path.isfile("heme.frcmod") == True):
+                Output, Solv = SetUpHemeB(PDB)
+                StructRelax(Output, Solv)
+            elif (os.path.isfile("hemeb.lib") == False) or (os.path.isfile("heme.frcmod") == False):
+                sys.exit("""
+ One or both of the expected parameter files for a 
+ b-type heme (hemeb.lib and heme.frcmod) are missing
+ from the current directory. Please make sure both 
+ files are present before re-running BioDC to analyze
+ your strucutre containing b-type hemes.
+ """)
+            break
+        else: 
+            print("""\n Sorry, I didn't understand your selection for the type of solvent used.""")
 
 if (DivSel == 0) or (DivSel == 2):
     print("""
@@ -1428,21 +5492,30 @@ if (DivSel == 0) or (DivSel == 2):
     if (DivSel == 2):
         Output = PreparedStructureSelection()
 
+        while True:
+            Solv = input("\n Is an explicit or implicit solvent present (explicit/implicit)? ")
+
+            if (Solv == "Explicit") or (Solv == "Implicit") or (Solv == "explicit") or (Solv == "implicit") or (Solv == "E") or (Solv == "I") or (Solv == "e") or (Solv == "i"):
+                pass
+                break
+            else:
+                print("""\n Sorry, I didn't understand your selection for the type of solvent used.""")
+
         if (os.path.isfile(Output+".prmtop") == True) and (os.path.isfile(Output+".rst7") == True):
             if (os.path.isfile("min.rst7") == True):
                 print("""
- Found %s.prmtop and %s.rst7, and the minimized structure (min.rst7).
+ Found %s.prmtop, %s.rst7, and the minimized structure (min.rst7).
  We are all set to proceed!""" %(Output, Output))
             else:
                 while True:
                     MinSel = input("""
- Found %s.prmtop and %s.rst7, but min.rst7.
+ Found %s.prmtop and %s.rst7, but not min.rst7.
  Would you like to relax the structure (yes/no)? """ %(Output, Output))
 
-                    if (MinSel == "Yes") or (MinSel == "yes") or (MinSel == "Y") or (MinSel == "y"):
+                    if (MinSel == "YES") or (MinSel == "Yes") or (MinSel == "yes") or (MinSel == "Y") or (MinSel == "y"):
                         StructRelax(Output, Solv)
                         break
-                    elif (MinSel == "No") or (MinSel == "no") or (MinSel == "N") or (MinSel == "n"):
+                    elif (MinSel == "NO") or (MinSel == "No") or (MinSel == "no") or (MinSel == "N") or (MinSel == "n"):
                         sys.exit("""
  Use of a structually relaxed geometry is hard-corded into the 
  program. If you wish to override this best-practice, please
@@ -1462,29 +5535,20 @@ if (DivSel == 0) or (DivSel == 2):
  If you simply made a typo in your response, please
  start again.""" %(Output, Output))
 
-        while True:
-            Solv = input("\n Is an explicit or implicit solvent present (explicit/implicit)? ")
-
-            if (Solv == "Explicit") or (Solv == "Implicit") or (Solv == "explicit") or (Solv == "implicit") or (Solv == "E") or (Solv == "I") or (Solv == "e") or (Solv == "i"):
-                pass
-                break
-            else:
-                print("""\n Sorry, I didn't understand your selection for the type of solvent used.""")
-
     while True:
         PolySel = input("""
  Is your structure polymeric (yes/no)? """)
 
-        if (PolySel == 'Yes') or (PolySel == "yes") or (PolySel == "Y") or (PolySel == "y"):
+        if (PolySel == 'YES') or (PolySel == 'Yes') or (PolySel == "yes") or (PolySel == "Y") or (PolySel == "y"):
             print("""
  The structure preparation stage required you to place all the heme
  residues from all the chains at the end of the PDB with sequential
  numbering. The programs in AmberTools that will be used to estimate 
  the charge transfer energetics want instead the residues to come in 
  the order of the connectiviity; that is, the hemes of chain A should 
- come both any residue in chain B. 
+ come before any residue in chain B. 
 
- To oblige this different numbering convention, we'll use the 
+ To oblige this different numbering convention, we'll use 
  CPPTRAJ of the AmberTools package to re-order the residues. 
  This process will write a new topology and coordinate file, 
  where the latter is of the structure you previously minimized.""")
@@ -1508,16 +5572,29 @@ if (DivSel == 0) or (DivSel == 2):
     """)
     LinearizeHemeSequence()
 
+    print("""
+ We also need to know if the hemes are of the b- or c-type
+ to compute the energetics correctly.
+    """)
+
+    HemeType = input(" Are there all b- or all c-type hemes? ")
+
     print(" ------------------------------------------------------------------- ")
 
     while True:
         CompLambda = input("""
  Should we compute the reorganization energy (yes/no)? """)
 
-        if (CompLambda == 'Yes') or (CompLambda == "yes") or (CompLambda == "Y") or (CompLambda == "y"):
-            Lambda = LambdaFromSASA(Output)
-            break
-        elif (CompLambda == 'No') or (CompLambda == "no") or (CompLambda == "N") or (CompLambda == "n"):
+        if (CompLambda == 'YES') or (CompLambda == "Yes") or (CompLambda == "yes") or (CompLambda == "Y") or (CompLambda == "y"):
+            if (HemeType == "c") or (HemeType == "C"):
+                Lambda = LambdaFromSASA(Output)
+                break
+
+            if (HemeType == "b") or (HemeType == "B"):
+                Lambda = LambdaFromSASA_HemeB(Output)
+                break
+
+        elif (CompLambda == 'NO') or (CompLambda == "No") or (CompLambda == "no") or (CompLambda == "N") or (CompLambda == "n"):
             print("""
  An array where each eleemnt is the lambda for a charge transfer is needed.""")
 
@@ -1538,7 +5615,7 @@ if (DivSel == 0) or (DivSel == 2):
         CompDG = input("""
  Should we compute the reaction free energy (yes/no)? """)
 
-        if (CompDG == 'Yes') or (CompDG == "yes") or (CompDG == "Y") or (CompDG == "y"):
+        if (CompDG == 'YES') or (CompDG == "Yes") or (CompDG == "yes") or (CompDG == "Y") or (CompDG == "y"):
 
             if (Solv == "explicit") or (Solv == "Explicit") or (Solv == "e") or (Solv == "E"):
                 print("""
@@ -1556,22 +5633,49 @@ if (DivSel == 0) or (DivSel == 2):
         calculation). In this case, the explicit solvent 
         prepared with the sturcutre is discarded.
 
-    Note that method #1 has two advantages:
-        (1) It is considerably faster than method #2
+    Recommendation:
+        The LIE approach has the advantages that it is considerably 
+        faster than the PBSA approach, and the overall change in 
+        electorstatic energy is decomposed into contributions from 
+        different groups of residues. 
+	
+	However, the LIE approach is only recommended for the analysis
+	of multiple snapshots. Electrostatic interactions need to be 
+	thermally averaged to reduce the strong dependence of fixed
+	charge (non-polarizable) interactions on a given configuration.
+	This averaging is effectively done in the PBSA approach, at 
+	least for the solvent.
 
-        (2) The overall change in electorstatic energy is decomposed
-            into contributions from different groups of residues.
+	PBSA should be used to analyse a single or multiple configurations.
+	LIE should be used to analyze only multiple configurations.
+
+	Both methods should give better results as the number of examiined
+	configurations increases. 
                 """)
 
                 while True:
                     DGmethod = input(""" Should we use the LIE or PBSA method (lie/pbsa)? """)
 
                     if (DGmethod == "LIE") or (DGmethod == "lie") or (DGmethod == str(1)):
-                        DG = DeltaGFromLIE(Output)
+                        if (HemeType == "c") or (HemeType == "C"):
+                            DG = DeltaGFromLIE(Output, HemeType)
+                        if (HemeType == "b") or (HemeType == "B"):
+                            DG = DeltaGFromLIE_HemeB(Output, HemeType)
                         break
 
                     elif (DGmethod == "PBSA") or (DGmethod == "pbsa") or (DGmethod == str(2)):
-                        DG = DeltaGFromPBSA(Output, Solv)
+                        print(""" 
+ CAUTION: Many parameters must be set to run PBSA calculations. 
+
+ BioDC queries you for some of them, but generally adopts default 
+ settings recommended in the Amber manual. It is **strongly**
+ recommended to read sections 6.1 through 6.3 of the Amber manual
+ and to modify the hard-coded parameter entires in the code.
+ """)
+                        if (HemeType == "c") or (HemeType == "C"):
+                            DG = DeltaGFromPBSA(Output, Solv, PolySel, HemeType)
+                        if (HemeType == "b") or (HemeType == "B"):
+                            DG = DeltaGFromPBSA_HemeB(Output, Solv, PolySel, HemeType)
                         break
                     else:
                         print(" Sorry, I didn't understand your response.\n")
@@ -1585,9 +5689,12 @@ if (DivSel == 0) or (DivSel == 2):
  heme oxidaiton using the Poisson–Boltzmann Surface Area
  module in the AmberTools package (essentially a Delphi-type
  calculation).""")
-                DG = DeltaGFromPBSA(Output, Solv)
+                if (HemeType == "c") or (HemeType == "C"):
+                	DG = DeltaGFromPBSA(Output, Solv, PolySel, HemeType)
+                if (HemeType == "b") or (HemeType == "B"):
+                	DG = DeltaGFromPBSA_HemeB(Output, Solv, PolySel, HemeType)
                 break
-        elif (CompDG == 'No') or (CompDG == "no") or (CompDG == "N") or (CompDG == "n"):
+        elif (CompDG == 'NO') or (CompDG == "No") or (CompDG == "no") or (CompDG == "N") or (CompDG == "n"):
             print("""
  An array where each eleemnt is the DG for a charge transfer is needed.""")
 
@@ -1605,16 +5712,36 @@ if (DivSel == 0) or (DivSel == 2):
     print(" ------------------------------------------------------------------- ")
 
     while True:
+        CompIntEng = input("""
+ Should we compute heme-heme interaction energies (yes/no)? """)
+
+        if (CompIntEng == 'YES') or (CompIntEng == "Yes") or (CompIntEng == "yes") or (CompIntEng == "Y") or (CompIntEng == "y"):
+            if (HemeType == "c") or (HemeType == "C"):
+                IntEng = HemeHemeInt(Output, Solv, HemeType)
+            if (HemeType == "b") or (HemeType == "B"):
+                IntEng = HemeHemeInt_HemeB(Output, Solv, HemeType)
+            break 
+        elif (CompIntEng == 'NO') or (CompIntEng == "No") or (CompIntEng == "no") or (CompIntEng == "N") or (CompIntEng == "n"):
+            print(" Skipping the computation of heme-heme interaction energies.")
+            break 
+        else: 
+            print(" Sorry, I didn't understand your response.")
+
+    while True:
         CompHda = input("""
  Should we estimate the electronic coupling from the geometry (yes/no)? """)
 
-        if (CompHda == 'Yes') or (CompHda == "yes") or (CompHda == "Y") or (CompHda == "y"):
-            Hda = AssignCouplingFromGeom(Output)
+        if (CompHda == 'YES') or (CompHda == "Yes") or (CompHda == "yes") or (CompHda == "Y") or (CompHda == "y"):
+            if (HemeType == "c") or (HemeType == "C"):
+                Hda = AssignCouplingFromGeom(Output)
+            if (HemeType == "b") or (HemeType == "B"):
+                Hda = AssignCouplingFromGeom_HemeB(Output)
             break
-        elif (CompHda == 'No') or (CompHda == "no") or (CompHda == "N") or (CompHda == "n"):
+        elif (CompHda == 'NO') or (CompHda == "No") or (CompHda == "no") or (CompHda == "N") or (CompHda == "n"):
             print("""
  An array where each eleemnt is the Hda for a charge transfer is needed.""")
 
+            idx = 0
             NumSteps = int(input(" Enter the total number of charge transfer step? "))
             print("""
  Enter Hda for each charge transfer step followed by return """)
@@ -1622,6 +5749,11 @@ if (DivSel == 0) or (DivSel == 2):
             Hda = [0]*(NumSteps)
             for idx in range(0, NumSteps):
                 Hda[idx] = float(input(""" """))
+
+                if (idx == 0):
+                    print("Hda(Site-%0d <-> Site-%0d) Hda = %6.3f meV" %(idx,  idx+1, Hda[idx]), file=open('Hda.txt', 'w'))
+                else:
+                    print("Hda(Site-%0d <-> Site-%0d) Hda = %6.3f meV" %(idx,  idx+1, Hda[idx]), file=open('Hda.txt', 'a'))
             break
         else:
             print(" Sorry, I didn't understand your response.")
@@ -1632,10 +5764,10 @@ if (DivSel == 0) or (DivSel == 2):
         CompKet = input("""
  Should we compute the non-adiabatic Marcus-theory rates (yes/no)? """)
 
-        if (CompKet == 'Yes') or (CompKet == "yes") or (CompKet == "Y") or (CompKet == "y"):
+        if (CompKet == 'YES') or (CompKet == "Yes") or (CompKet == "yes") or (CompKet == "Y") or (CompKet == "y"):
             ComputeMarcusRates(Hda, Lambda, DG)
             break
-        elif (CompKet == 'No') or (CompKet == "no") or (CompKet == "N") or (CompKet == "n"):
+        elif (CompKet == 'NO') or (CompKet == "No") or (CompKet == "no") or (CompKet == "N") or (CompKet == "n"):
             print("""
  An array where each eleemnt is the Ket for a charge transfer is needed.""")
 
@@ -1673,22 +5805,74 @@ if (DivSel == 0) or (DivSel == 3):
 
     print("""
  This division of the BioDC workflow computes, via the analytical
- Derrida formula, the charge diffuction coefficient based on the 
- non-adiabatic Marcus theory rates. The diffusion coefficient is
- then related to the electrical resistance and used in Ohm's law
- to compute the current as a function of applied bias. Note that 
- this approach is only rigorously correct in the limit of zero
- bias.
+ Derrida formula [Ref #1], the charge diffuction coefficient 
+ based on the non-adiabatic Marcus theory rates. The diffusion 
+ coefficient is then related to the electrical resistance and used 
+ in Ohm's law to compute the current as a function of applied bias
+ [Ref #2]. Note that this approach is only rigorously correct in 
+ the limit of zero bias and single (or non-interacting) mobile 
+ charges. The implementaiton of the Derrida formula was kindly 
+ provided by Fredrik Jansson [Refs #3 & #4].
+
+ To relax the single-particle condition, the multi-particle 
+ steady-state flux is computed according to an analytical 
+ expression derived by Blumberger and co-workers (Refs. #5-#7).
+ The original code was kindly provided by Jochen Blumberger 
+ and Xiuyun Jiang.
+
+ References
+   [1] B. Derrida, 
+       "Velocity and diffusion constant of a periodic one-dimensional hopping model" 
+       J. Stat. Phys. 31, 433 (1983).
+
+   [2] M. J. Guberman-Pfeffer
+       "Assessing Thermal Response of Redox Conduction for Anti-Arrhenius Kinetics 
+       in a Microbial Cytochrome Nanowire"
+       J. Phys. Chem. B 2022, 126, 48, 10083–10097
+
+   [3] Thesis, F. Jansson, Charge transport in disordered materials -
+       simulations, theory, and numerical modeling of hopping transport and
+       electron-hole recombination. Åbo Akademi University, 2011
+       https://urn.fi/URN:NBN:fi-fe201311277464
+
+       Implementation details in section 3.6, especially a method to evaluate
+       the expressions in linear time. Application in section 6.2.
+
+   [4] Effect of Electric Field on Diffusion in Disordered Materials I.
+       One-dimensional Hopping Transport, A. V. Nenashev, F. Jansson,
+       S. D. Baranovskii, R. Österbacka, A. V. Dvurechenskii, F. Gebhard,
+       Phys. Rev. B 81, 115203 (2010)
+       http://dx.doi.org/10.1103/PhysRevB.81.115203
+
+   [5] M. Breuer, K. M. Rosso, and J. Blumberger, 
+       “Electron flow in multi-heme bacterial cytochromes is a balancing act 
+       between heme electronic interaction and redox potentials,”
+       Proc. Nat. Acad. Sci. USA, vol. 111, p. 611, 2014.
+
+   [6] X. Jiang, Z. Futera, M. E. Ali, F. Gajdos, G. F. von Rudorff, A. Carof, M. Breuer, and J. Blumberger, 
+       “Cysteine linkages accelerate electron flow through tetra-heme protein STC,” 
+       J. Am. Chem. Soc., vol. 139, p. 17237–17240, 2017.
+
+   [7] X. Jiang, J. H. van Wonderen, J. N. Butt, M. J. Edwards, T. A. Clarke, and J. Blumberger, 
+       “Which multi-heme protein complex transfers electrons more efficiently? Comparing MtrCAB from Shewanella 
+       with OmcS from Geobacter,” 
+       J. Phys. Chem. Lett., vol. 11, pp. 9421-9425, 2020.
     """, end=" ")
+
+    HemeType = input("\n Are there all b- or all c-type hemes? ")
 
     if (os.path.isfile("rates.txt") == True):
         print("""
  Found rates.txt, which is needed to proceed!
 
- We will now compile and run a C-program kindly provided by
- Dr. Fredrik Jansson that has been modified only to 
- interface I/O operations with the BioDC program""")
-        ComputeDiffusionCoefficient()
+ We will now compute the multi-particle, stead-state flux.
+ """)
+        Jf,Jb,Javg = ComputeFlux()
+
+#       print("""
+#We will now compute the single-particle diffusion coefficient. 
+#""")
+#       ComputeDiffusionCoefficient()
     else:
         sys.exit("""
  rates.txt not found! Please run division #2 of the BioDC 
@@ -1700,13 +5884,12 @@ if (DivSel == 0) or (DivSel == 3):
  transfer steps. 
         """)
 
-    if (os.path.isfile("D.txt") == True):
+    if (os.path.isfile("rates.txt") == True):
         print("""
- Found D.txt, which is needed to proceed!
  We will at last compute the redox current. 
  To do this, some system-specific information is needed.
         """)
-        ComputeRedoxCurrent()
+        ComputeRedoxCurrent(HemeType)
         print(" Done!")
     else:
         sys.exit("""
@@ -1717,5 +5900,7 @@ if (DivSel == 0) or (DivSel == 3):
  where "[D]" is to be replaced with the diffusion coefficient.
         """)
 
-
-
+if (DivSel != 0) and (DivSel != 1) and (DivSel != 2) and (DivSel != 3):
+    sys.exit("""
+ Please re-launch BioDC and select one of the available modules.
+ """)
