@@ -37,7 +37,7 @@ The BioDC workflow and the implemented methodologies are descirbed in the follow
 Contributions of external code to the BioDC project is most gratefully appreciated. The following researchers have contributed code so far. 
  
 - Dr. Fredrik Jansson provided the Python implementation of the Derrida formula.
-- Prof. Jochen Blumberger and Dr. Xiuyun Jiang providing the Python implementaiton of the steady-state flux kinetic model.
+- Prof. Jochen Blumberger and Dr. Xiuyun Jiang provided the Python implementaiton of the steady-state flux kinetic model.
 
 ### How do I get started?
 
