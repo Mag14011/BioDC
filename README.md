@@ -1,24 +1,43 @@
 ![Logo for the BioDC python program.](BioDC_logo.png)
 
-# BioDC 
-## A Python program that automates and accelerates the computation of redox conductivity in polymeric multi-heme cytochromes 
+# BioDC (Version 2.0)
+## A Python program that automates and accelerates the computation of redox potentials, cooperativities, and conductivities in (polymeric) multi-heme cytochromes.
 
 ### What does this project do?
 
-BioDC computes the diffusive redox current in polymeric multi-heme cytochrome 'nanowires.' To do that, the energetics for each heme-to-heme electron transfer are estimated from the heme solvent accessibility and stacking geometry, as well as the redox-linked change in electrostatic energy. Standard Marcus-theory rates are computed and used to determine a single-particle diffusion coefficient along a one-dimensional chain of ('hopping') sites with the analytical Derrida formula. The diffusion coefficient is proportional to electrical resistance, thus allowing Ohmic redox current to be computed. 
+BioDC has four main funcitons:
 
-Note that the C-program implementaiton of the Derrida formula was kindly provided by Dr. Fredrik Jansson (see Refs. 3 and 4 below). It has only been modified to interface I/O operations with the rest of the BioDC workflow. 
+(1) Assist in the preparation of proteins containing one or more heme groups for molecular dynamics with the AMBER forcefield. The heme can be b- or c-type and be His-His or His-Met ligated. 
 
-Relevant References: 
-1) Guberman-Pfeffer, M. J. From Hot Water to Dry Dirt: Microbes Use Cytochrome ‘Nanowires’ of Similar Conductivity but Different Structure. *BioRxiv.* https://www.biorxiv.org/content/10.1101/2023.06.12.544705v1
-  
-2) Guberman-Pfeffer, M. J. Assessing Thermal Response of Redox Conduction for Anti-Arrhenius Kinetics in a Microbial Cytochrome Nanowire. *J. Phys. Chem.* B **2022**, 126 (48), 10083-10097.
+(2) Estimate the reaction and reorganizaiton free energies, as well as electronic couplings for heme-to-heme electron transfer. 
 
-3) Jiang, X.; van Wonderen, J. H.; Butt, J. N.; Edwards, M. J.; Clarke, T. A.; Blumberger, J. Which multi-heme protein complex transfers electrons more efficiently? Comparing MtrCAB from Shewanella with OmcS from Geobacter. *J. Phys. Chem. Lett.* **2020**, 11 (21), 9421-9425.
+(3) Compute redox cooperaitivites (i.e., how much the oxidaiton of one heme influences the redox potential of another heme in the same system).
 
-4) Nenashev, A. V.; Jansson, F.; Baranovskii, S. D.; Österbacka, R.; Dvurechenskii, A. V.; Gebhard, F. Effect of Electric Field on Diffusion in Disordered Materials. I. One-Dimensional Hopping Transport. *Phys. Rev.* B **2010**, 81, 115203
+(4) Compute redox cooperativiity according to a single particle charge diffusion model or a multi-particle stead-state flux model. 
 
-5) Jansson, F. Charge Transport in Disordered Materials: Simulations, Theory, and Numerical Modeling of Hopping Transport and Electron-Hole Recombination; Ph.D. Dissertation, Åbo Akademi University, Turku, Finland, **2011**.
+### Relevant References
+
+The BioDC workflow and the implemented methodologies are descirbed in the following publications.
+
+(1) Derrida, B. Velocity and diffusion constant of a periodic one-dimensional hopping model. *J. Stat. Phys.* **1983**, 31, 433-450.
+
+(2) Guberman-Pfeffer, M. J. Assessing Thermal Response of Redox Conduction for Anti-Arrhenius Kinetics in a Microbial Cytochrome Nanowire. *J. Phys. Chem. B* **2022**, 126 (48), 10083-10097. DOI: 10.1021/acs.jpcb.2c06822  From NLM Medline.
+
+(3) Jansson, F. Charge transport in disordered materials: simulations, theory, and numerical modeling of hopping transport and electron-hole recombination. Åbo Akademi University, 2011. https://urn.fi/URN:NBN:fi-fe201311277464.
+
+(4) Nenashev, A.; Jansson, F.; Baranovskii, S.; Österbacka, R.; Dvurechenskii, A.; Gebhard, F. Effect of electric field on diffusion in disordered materials. I. One-dimensional hopping transport. *Physl. Rev. B* **2010**, 81 (11), 115203.
+
+(5) Breuer, M.; Rosso, K. M.; Blumberger, J. Electron flow in multiheme bacterial cytochromes is a balancing act between heme electronic interaction and redox potentials. *Proc. Natl. Acad. Sci. U. S. A.* **2014**, 111 (2), 611-616. DOI: 10.1073/pnas.1316156111.
+
+(6) Jiang, X.; Futera, Z.; Ali, M. E.; Gajdos, F.; von Rudorff, G. F.; Carof, A.; Breuer, M.; Blumberger, J. Cysteine Linkages Accelerate Electron Flow through Tetra-Heme Protein STC. *J. Am. Chem. Soc.* **2017**, 139 (48), 17237-17240. DOI: 10.1021/jacs.7b08831.
+
+(7) Jiang, X.; van Wonderen, J. H.; Butt, J. N.; Edwards, M. J.; Clarke, T. A.; Blumberger, J. Which Multi-Heme Protein Complex Transfers Electrons More Efficiently? Comparing MtrCAB from Shewanella with OmcS from Geobacter. *J. Phys. Chem. Lett.* **2020**, 11 (21), 9421-9425. DOI: 10.1021/acs.jpclett.0c02842.
+
+### Contributors
+Contributions of external code to the BioDC project is most gratefully appreciated. The following researchers have contributed code so far. 
+ 
+- Dr. Fredrik Jansson provided the Python implementation of the Derrida formula.
+- Prof. Jochen Blumberger and Dr. Xiuyun Jiang providing the Python implementaiton of the steady-state flux kinetic model.
 
 ### How do I get started?
 
