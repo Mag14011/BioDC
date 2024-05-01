@@ -728,6 +728,7 @@ quit
                         SelHISIDLIST.remove(i)
             SelHisIDs = " ".join(SelHISIDLIST) 
 
+            print(f"\n Command: \n  cpinutil.py -resnames {RESNAMES} -resnums {SelASPIDs} {SelGLUIDs} {SelHisIDs} {SelLYSIDs} {SelTYRIDs} {SelPRNIDs} -p {OutPrefix}_reord.prmtop -igb 2 -op {OutPrefix}_new.prmtop -o {OutPrefix}.cpin \n")
             subprocess.run(f"cpinutil.py -resnames {RESNAMES} -resnums {SelASPIDs} {SelGLUIDs} {SelHisIDs} {SelLYSIDs} {SelTYRIDs} {SelPRNIDs} -p {OutPrefix}_reord.prmtop -igb 2 -op {OutPrefix}_new.prmtop -o {OutPrefix}.cpin", shell=True)
 
     return OutPrefix, SolvEnv 

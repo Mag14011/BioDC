@@ -125,7 +125,7 @@ def CreateResIndexing(PDB, InputDict, LaunchDir):
    set DistMinAx $DistMin
    set DistMaxAx $DistMax
    while {$NumHIS < 2 && $DistMinAx <= $DistMax} {
-     set HIS [lsort -integer [[atomselect top "(resname HIS HIE HID HIP and name NE2 and within $DistMinAx of resname HEC HEM and resid $ShiftHResID) or (resname HIS HIE HID HIP and name N and within $DistMinAx of resname HEC HEM and resid $ShiftHResID)"] get resid]]
+     set HIS [lsort -integer [[atomselect top "(resname HIS HIE HID HIP and name NE2 and within $DistMinAx of resname HEC HEM and resid $ShiftHResID and name FE) or (resname HIS HIE HID HIP and name N and within $DistMinAx of resname HEC HEM and resid $ShiftHResID and name FE)"] get resid]]
      set NumHIS [llength $HIS]
      set DistMinAx [expr {$DistMinAx+0.1}]
    }
@@ -137,7 +137,7 @@ def CreateResIndexing(PDB, InputDict, LaunchDir):
    set DistMinAx $DistMin
    set DistMaxAx $DistMax
    while {$NumMET < 1 && $DistMinAx <= $DistMax && $NumHIS == 1} {
-     set MET [lsort -integer [[atomselect top "(resname MET and name SD and within $DistMinAx of resname HEC HEM and resid $ShiftHResID) or (resname MET and name N and within $DistMinAx of resname HEC HEM and resid $ShiftHResID)"] get resid]]
+     set MET [lsort -integer [[atomselect top "(resname MET and name SD and within $DistMinAx of resname HEC HEM and resid $ShiftHResID and name FE) or (resname MET and name N and within $DistMinAx of resname HEC HEM and resid $ShiftHResID and name FE)"] get resid]]
      set NumMET [llength $MET]
      set DistMinAx [expr {$DistMinAx+0.1}]
    }
