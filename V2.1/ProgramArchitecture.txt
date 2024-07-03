@@ -1,0 +1,36 @@
+Architecture of BioDC versions 2.0
+
+The following is a list of the modules
+and these dependencies on other modules
+
+BioDCv2.py: 
+	StructurePreparationAndRelaxation 
+		Initialization
+		SelectDisulfides
+		SelectMutate
+		SelectpHActiveSites
+		CreateResIndexing
+		ProcessResIndexing
+		ReBuildStructure
+			SelectpHActiveSites
+		StructRelax
+	AntechamberToEnergeticEvalulation 
+		StructRelax
+	EnergeticEvalulation 
+		LambdaFromSASA
+		DeltaGFromPBSA
+			DefineRefState
+			GenerateRedoxStateTopologies
+		HemeHemeInt
+			PairedChargeAssignment
+		AssignCouplingFromGeom
+		ComputeMarcusRates
+	RedoxCurrentPrediction 
+		ComputeFlux
+			blumberger.py:
+				hopping 
+		ComputeRedoxCurrent
+			MeasureAvgDist
+			ComputeDiffusionCoefficient
+				derrida
+			MeasureSubunitLength
