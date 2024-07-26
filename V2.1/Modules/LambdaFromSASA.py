@@ -1,27 +1,24 @@
-################################################################################################################################################
-# Generic Modules
 import os
 import sys
 import subprocess
 from subprocess import Popen
-################################################################################################################################################
 
-def LambdaFromSASA(OutPrefix):
+def LambdaFromSASA(OutPrefix, InputDict):
 
-    if (os.path.isfile("min.pdb") == False):
+    if not os.path.isfile("min.pdb"):
         sys.exit("""
  The minimized structure (min.pdb) is missing.
  Something went wrong in a prior step and 
  we cannot proceed. I apologize for the 
  inconvenience!""")
 
-    elif (os.path.isfile("min.pdb") == True):
-        idx=0
-        if (os.path.isfile("SelResIndexing.txt") == True):
+    if os.path.isfile("min.pdb"):
+        idx = 0
+        if os.path.isfile("SelResIndexing.txt"):
             with open("SelResIndexing.txt") as fp:
                 NumHEC = len(fp.readlines())
-                HEM = [0]*NumHEC
-                ActiveIDs = [0]*NumHEC
+                HEM = [0] * NumHEC
+                ActiveIDs = [0] * NumHEC
                 fp.seek(0)
  
                 Lines = fp.readlines()
@@ -30,28 +27,26 @@ def LambdaFromSASA(OutPrefix):
                     HemeType = line.strip().split(" ")[-2]
                     AxLigType = line.strip().split(" ")[-1]
 
-                    if ( EntryLength == 8 ) and ( HemeType == "c") and ( AxLigType == "HH" ):
+                    if EntryLength == 8 and HemeType == "c" and AxLigType == "HH":
                         CYSb = int(line.strip().split(" ")[0])
                         CYSc = int(line.strip().split(" ")[1])
                         HISp = int(line.strip().split(" ")[2])
                         HISd = int(line.strip().split(" ")[3])
                         HEM[idx] = int(line.strip().split(" ")[5])
-                       #ActiveIDs[idx] = f"{CYSb} {CYSc} {HISp} {HISd} {HEM[idx]}"
                         ActiveIDs[idx] = f"{HISp} {HISd} {HEM[idx]} {HEM[idx]+1} {HEM[idx]+2}"
-                    elif ( EntryLength == 8 ) and ( HemeType == "c") and ( AxLigType == "HM" ):
+                    elif EntryLength == 8 and HemeType == "c" and AxLigType == "HM":
                         CYSb = int(line.strip().split(" ")[0])
                         CYSc = int(line.strip().split(" ")[1])
                         HISp = int(line.strip().split(" ")[2])
                         METd = int(line.strip().split(" ")[3])
                         HEM[idx] = int(line.strip().split(" ")[5])
-                       #ActiveIDs[idx] = f"{CYSb} {CYSc} {HISp} {METd} {HEM[idx]}"
                         ActiveIDs[idx] = f"{HISp} {METd} {HEM[idx]} {HEM[idx]+1} {HEM[idx]+2}"
-                    elif ( EntryLength == 6 ) and ( HemeType == "b") and ( AxLigType == "HH" ):
+                    elif EntryLength == 6 and HemeType == "b" and AxLigType == "HH":
                         HISp = int(line.strip().split(" ")[0])
                         HISd = int(line.strip().split(" ")[1])
                         HEM[idx] = int(line.strip().split(" ")[3])
                         ActiveIDs[idx] = f"{HISp} {HISd} {HEM[idx]} {HEM[idx]+1} {HEM[idx]+2}"
-                    elif ( EntryLength == 6 ) and ( HemeType == "b") and ( AxLigType == "HM" ):
+                    elif EntryLength == 6 and HemeType == "b" and AxLigType == "HM":
                         HISp = int(line.strip().split(" ")[0])
                         METd = int(line.strip().split(" ")[1])
                         HEM[idx] = int(line.strip().split(" ")[3])
@@ -59,8 +54,8 @@ def LambdaFromSASA(OutPrefix):
                     else:
                         print(f" *** Missing entries on line number {idx+1} of SelResIndexing.txt!")
 
-                    idx+=1
-        elif (os.path.isfile("SelResIndexing.txt") == False):
+                    idx += 1
+        else:
             sys.exit("""
  SelResIndexing.txt is missing.
  Something went wrong when you defined
@@ -69,7 +64,7 @@ def LambdaFromSASA(OutPrefix):
  This problem must be resolved before 
  proceeding.""")
 
-        for idx in range(len(HEM)-1):
+        for idx in range(len(HEM) - 1):
             print(f"""
  mol new min.pdb
  set HEM1 {HEM[idx]}; set HEM2 {HEM[idx+1]}""", file=open('SASACalc.tcl', 'w'))  
@@ -112,48 +107,45 @@ def LambdaFromSASA(OutPrefix):
  exit
             """, file=open('SASACalc.tcl', 'a'))
 
-            if (os.path.isfile(f"{HEM[idx]},{HEM[idx+1]}_SASAanalysis.dat") == True):
+            if os.path.isfile(f"{HEM[idx]},{HEM[idx+1]}_SASAanalysis.dat"):
                 print(f""" Found {HEM[idx]},{HEM[idx+1]}_SASAanalysis.dat from a prior execution.
  This prior output will be used for the analysis.
   """) 
-            elif (os.path.isfile(f"{HEM[idx]},{HEM[idx+1]}_SASAanalysis.dat") == False):
+            else:
                 print(f" Now using VMD to compute SASA Donor = {HEM[idx]} & Acceptor = {HEM[idx+1]}...")
                 subprocess.run("vmd -e SASACalc.tcl > SASACalc.log", shell=True)
-                #subprocess.run("/Applications/VMD\ 1.9.4a51-x86_64-Rev9.app/Contents/vmd/vmd_MACOSXX86_64 -e SASACalc.tcl > SASACalc.log", shell=True)
 
         print(" Computing Reorganization Energy from Solvent Accessibility...")
-        alpha = 5.18; beta = 0.016;
-        Rd=4.6; Ra=4.6;
-        Eopt=1.84 
+        alpha = 5.18
+        beta = 0.016
+        Rd = 4.6
+        Ra = 4.6
+        Eopt = 1.84 
 
-        Dsasa = [0]*(len(HEM)-1)
-        Asasa = [0]*(len(HEM)-1)
-        TotalSASA = [0]*(len(HEM)-1)
-        Es = [0]*(len(HEM)-1)
-        M = [0]*(len(HEM)-1)
-        Rda = [0]*(len(HEM)-1)
-        R = [0]*(len(HEM)-1)
-        Lambda = [0]*(len(HEM)-1)
-        for idx in range(len(HEM)-1):
-            with open(str(HEM[idx])+","+str(HEM[idx+1])+"_SASAanalysis.dat") as fp:
-               #print(str(HEM[idx])+","+str(HEM[idx+1])+"_SASAanalysis.dat")
+        Dsasa = [0] * (len(HEM) - 1)
+        Asasa = [0] * (len(HEM) - 1)
+        TotalSASA = [0] * (len(HEM) - 1)
+        Es = [0] * (len(HEM) - 1)
+        M = [0] * (len(HEM) - 1)
+        Rda = [0] * (len(HEM) - 1)
+        R = [0] * (len(HEM) - 1)
+        Lambda = [0] * (len(HEM) - 1)
+        for idx in range(len(HEM) - 1):
+            with open(f"{HEM[idx]},{HEM[idx+1]}_SASAanalysis.dat") as fp:
                 Lines = fp.readlines()
                 for line in Lines:
-                   #print(line)
                     Dsasa[idx] = float(line.strip().split(" ")[1])
                     Asasa[idx] = float(line.strip().split(" ")[2])
                     Rda[idx] = float(line.strip().split(" ")[3])
-                   #print(Dsasa, Asasa, Rda)
 
             TotalSASA[idx] = Dsasa[idx] + Asasa[idx]
             Es[idx] = alpha + (beta * TotalSASA[idx])
-            M[idx] = (1/Eopt) - (1/Es[idx])
-            R[idx] = (1/((2*Rd)/0.53)) + (1/((2*Ra)/0.53)) - (1/(Rda[idx]/0.53))
-            Lambda[idx] = ((-1)**2) * (M[idx]) * (R[idx]) * (27.2114)
-           #print(TotalSASA[idx], Es[idx], M[idx], R[idx], Lambda[idx])
+            M[idx] = (1 / Eopt) - (1 / Es[idx])
+            R[idx] = (1 / ((2 * Rd) / 0.53)) + (1 / ((2 * Ra) / 0.53)) - (1 / (Rda[idx] / 0.53))
+            Lambda[idx] = ((-1) ** 2) * (M[idx]) * (R[idx]) * (27.2114)
 
-        for idx in range(len(HEM)-1):
-            if (idx == 0):
+        for idx in range(len(HEM) - 1):
+            if idx == 0:
                 print(""" 
  HEH-%0d -> HEM-%0d --------- 
  Dsasa     = %.3f
@@ -162,9 +154,9 @@ def LambdaFromSASA(OutPrefix):
  TotalSASA = %.3f
  Es        = %.3f
  ----------------------------
- Reorg. Eng. = %.3f""" %(HEM[idx], HEM[idx+1], Dsasa[idx], Asasa[idx], Rda[idx], TotalSASA[idx], Es[idx], Lambda[idx]), file=open('Lambda.txt', 'w'))
+ Reorg. Eng. = %.3f""" % (HEM[idx], HEM[idx + 1], Dsasa[idx], Asasa[idx], Rda[idx], TotalSASA[idx], Es[idx], Lambda[idx]), file=open('Lambda.txt', 'w'))
 
-            if (idx != 0):
+            if idx != 0:
                 print(""" 
  HEH-%0d -> HEM-%0d --------- 
  Dsasa     = %.3f
@@ -173,10 +165,8 @@ def LambdaFromSASA(OutPrefix):
  TotalSASA = %.3f
  Es        = %.3f
  ----------------------------
- Reorg. Eng. = %.3f""" %(HEM[idx], HEM[idx+1], Dsasa[idx], Asasa[idx], Rda[idx], TotalSASA[idx], Es[idx], Lambda[idx]), file=open('Lambda.txt', 'a'))
+ Reorg. Eng. = %.3f""" % (HEM[idx], HEM[idx + 1], Dsasa[idx], Asasa[idx], Rda[idx], TotalSASA[idx], Es[idx], Lambda[idx]), file=open('Lambda.txt', 'a'))
 
     print(" Done!")
 
     return Lambda
-
-################################################################################################################################################

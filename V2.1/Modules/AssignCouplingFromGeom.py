@@ -8,9 +8,9 @@ from subprocess import Popen
 
 ################################################################################################################################################
 
-def AssignCouplingFromGeom(LaunchDir, OutPrefix):
+def AssignCouplingFromGeom(LaunchDir, OutPrefix, InputDict):
 
-    if (os.path.exists(f"{LaunchDir}/SPR") == True):
+    if (os.path.exists(f"{LaunchDir}/SPR")):
         StrucDir = f"{LaunchDir}/SPR"
     else:
         StrucDir = f"{LaunchDir}"
@@ -42,12 +42,12 @@ def AssignCouplingFromGeom(LaunchDir, OutPrefix):
  run
  quit""", file=open("CalcOrientation.in", "w"))
 
-        if (os.path.isfile(f"hemplaneorient_{HEM[idx]}-{HEM[idx+1]}.dat") == True):
+        if (os.path.isfile(f"hemplaneorient_{HEM[idx]}-{HEM[idx+1]}.dat")):
             print(f""" 
  Found hemplaneorient_{HEM[idx]}-{HEM[idx+1]}.dat from a prior execution.
- This prior output will be used for the analysis.""") 
+ This prior output will be used for the analysis.""")
 
-        if (os.path.isfile(f"hemplaneorient_{HEM[idx]}-{HEM[idx+1]}.dat") == False):
+        if (not os.path.isfile(f"hemplaneorient_{HEM[idx]}-{HEM[idx+1]}.dat")):
             subprocess.run("cpptraj -i CalcOrientation.in > CalcOrientation.log", shell=True)
 
         lc = 0
@@ -75,9 +75,9 @@ def AssignCouplingFromGeom(LaunchDir, OutPrefix):
     for idx in range(len(HEM)-1):
 
         if (idx == 0):
-            print("Hda(HEM-%0d <-> HEM-%0d) ang. = %10.3f deg.; Hda = %6.3f meV" %(HEM[idx],  HEM[idx+1], ang[idx], Hda[idx]), file=open('Hda.txt', 'w'))
+            print("Hda(HEM-%0d <-> HEM-%0d) ang. = %10.3f deg.; Hda = %6.3f meV" % (HEM[idx], HEM[idx+1], ang[idx], Hda[idx]), file=open('Hda.txt', 'w'))
         else:
-            print("Hda(HEM-%0d <-> HEM-%0d) ang. = %10.3f deg.; Hda = %6.3f meV" %(HEM[idx],  HEM[idx+1], ang[idx], Hda[idx]), file=open('Hda.txt', 'a'))
+            print("Hda(HEM-%0d <-> HEM-%0d) ang. = %10.3f deg.; Hda = %6.3f meV" % (HEM[idx], HEM[idx+1], ang[idx], Hda[idx]), file=open('Hda.txt', 'a'))
 
     print(" Done!")
 
