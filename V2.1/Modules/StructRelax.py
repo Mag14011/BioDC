@@ -3,7 +3,7 @@ import sys
 import subprocess
 from subprocess import Popen
 
-def StructRelax(StrucDir, OutPrefix, SolvEnv, InputDict):
+def StructRelax(LaunchDir, StrucDir, OutPrefix, SolvEnv, InputDict):
     if (os.path.isfile(f"{StrucDir}/{OutPrefix}_new.prmtop") and os.path.isfile(f"{StrucDir}/{OutPrefix}_reord.rst7")) or \
        (os.path.isfile(f"{StrucDir}/{OutPrefix}_reord.prmtop") and os.path.isfile(f"{StrucDir}/{OutPrefix}_reord.rst7")) or \
        (os.path.isfile(f"{StrucDir}/{OutPrefix}.prmtop") and os.path.isfile(f"{StrucDir}/{OutPrefix}.rst7")):
@@ -42,10 +42,10 @@ Energy Minimization Stage in Explicit Solvent
             while True:
                 if "StructRelaxCompChoice" in InputDict:
                     StructRelaxCompChoice = InputDict["StructRelaxCompChoice"]
-                    print(f"StructRelaxCompChoice = {StructRelaxCompChoice}", file=open("InteractiveInput.txt", 'a'))
+                    print(f"StructRelaxCompChoice = {StructRelaxCompChoice}", file=open(f"{LaunchDir}/InteractiveInput.txt", 'a'))
                 else:
                     StructRelaxCompChoice = input("\nRun the minimization using SANDER (S) or PMEMD (P)? ")
-                    print(f"StructRelaxCompChoice = {StructRelaxCompChoice}", file=open("InteractiveInput.txt", 'a'))
+                    print(f"StructRelaxCompChoice = {StructRelaxCompChoice}", file=open(f"{LaunchDir}/InteractiveInput.txt", 'a'))
 
                 if StructRelaxCompChoice.lower() in ["sander", "s"]:
                     print("Running minimization ...")
@@ -61,11 +61,11 @@ Energy Minimization Stage in Explicit Solvent
                     while True:
                         if "NProc" in InputDict:
                             NProc = InputDict["NProc"]
-                            print(f"NProc = {NProc}", file=open("InteractiveInput.txt", 'a'))
+                            print(f"NProc = {NProc}", file=open(f"{LaunchDir}/InteractiveInput.txt", 'a'))
                             break
                         else:
                             NProc = input("Parallelize the minimization over how many CPUs? ")
-                            print(f"NProc = {NProc}", file=open("InteractiveInput.txt", 'a'))
+                            print(f"NProc = {NProc}", file=open(f"{LaunchDir}/InteractiveInput.txt", 'a'))
                             break
 
                     print("Running minimization ...")
@@ -105,10 +105,10 @@ Energy Minimization in Implicit Solvent
             while True:
                 if "StructRelaxCompChoice" in InputDict:
                     StructRelaxCompChoice = InputDict["StructRelaxCompChoice"]
-                    print(f"StructRelaxCompChoice = {StructRelaxCompChoice}", file=open("InteractiveInput.txt", 'a'))
+                    print(f"StructRelaxCompChoice = {StructRelaxCompChoice}", file=open(f"{LaunchDir}/InteractiveInput.txt", 'a'))
                 else:
                     StructRelaxCompChoice = input("\nRun the minimization using SANDER (S) or PMEMD (P)? ")
-                    print(f"StructRelaxCompChoice = {StructRelaxCompChoice}", file=open("InteractiveInput.txt", 'a'))
+                    print(f"StructRelaxCompChoice = {StructRelaxCompChoice}", file=open(f"{LaunchDir}/InteractiveInput.txt", 'a'))
 
                 if StructRelaxCompChoice.lower() in ["sander", "s"]:
                     print("Running minimization ...")
@@ -124,11 +124,11 @@ Energy Minimization in Implicit Solvent
                     while True:
                         if "NProc" in InputDict:
                             NProc = InputDict["NProc"]
-                            print(f"NProc = {NProc}", file=open("InteractiveInput.txt", 'a'))
+                            print(f"NProc = {NProc}", file=open(f"{LaunchDir}/InteractiveInput.txt", 'a'))
                             break
                         else:
                             NProc = input("Parallelize the minimization over how many CPUs? ")
-                            print(f"NProc = {NProc}", file=open("InteractiveInput.txt", 'a'))
+                            print(f"NProc = {NProc}", file=open(f"{LaunchDir}/InteractiveInput.txt", 'a'))
 
                     print("Running minimization ...")
                     if os.path.isfile(f"{OutPrefix}_new.prmtop"):

@@ -98,7 +98,7 @@ def StructurePreparationAndRelaxation(LaunchDir, ForceFieldDir, InputDict):
     PDB = CreateResIndexing.CreateResIndexing(PDB, InputDict, LaunchDir)
     ProcessResIndexing.ProcessResIndexing(PDB, DisulfList, SelASPIDs, SelGLUIDs, SelHISIDs, SelLYSIDs, SelTYRIDs, SelPRNIDs, InputDict, LaunchDir)
     OutPrefix, SolvEnv = ReBuildStructure.ReBuildStructure(ForceFieldDir, PDB, SelCpH, InputDict, LaunchDir)
-    StructRelax.StructRelax(os.getcwd(), OutPrefix, SolvEnv, InputDict)
+    StructRelax.StructRelax(LaunchDir, os.getcwd(), OutPrefix, SolvEnv, InputDict)
 
     return OutPrefix, SolvEnv
 ################################################################################################################################################

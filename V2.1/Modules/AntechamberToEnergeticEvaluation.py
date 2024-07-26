@@ -52,7 +52,7 @@ def PreparedStructureSelection(LaunchDir, InputDict):
                         print(f"MinSel = {MinSel}", file=open(f"{LaunchDir}/InteractiveInput.txt", 'a'))
 
                     if MinSel.lower() in ["yes", "y"]:
-                        StructRelax.StructRelax(StrucDir, OutPrefix, SolvEnv, InputDict)
+                        StructRelax.StructRelax(LaunchDir, StrucDir, OutPrefix, SolvEnv, InputDict)
                         break
                     elif MinSel.lower() in ["no", "n"]:
                         sys.exit(f"Use of a structurally relaxed geometry is hard-coded into the program. If you wish to override this best-practice, please rename your prepared {OutPrefix}.rst7 to min.rst7 and re-run this module of BioDC.\n")
@@ -88,7 +88,7 @@ def PreparedStructureSelection(LaunchDir, InputDict):
                         print(f"MinSel = {MinSel}", file=open(f"{LaunchDir}/InteractiveInput.txt", 'a'))
 
                     if MinSel.lower() in ["yes", "y"]:
-                        StructRelax.StructRelax(StrucDir, OutPrefix, SolvEnv, InputDict)
+                        StructRelax.StructRelax(LaunchDir, StrucDir, OutPrefix, SolvEnv, InputDict)
                         break
                     elif MinSel.lower() in ["no", "n"]:
                         sys.exit(f"Use of a structurally relaxed geometry is hard-coded into the program. If you wish to override this best-practice, please rename your prepared {OutPrefix}.rst7 to min.rst7 and re-run this module of BioDC.\n")
@@ -124,7 +124,7 @@ def PreparedStructureSelection(LaunchDir, InputDict):
                         print(f"MinSel = {MinSel}", file=open(f"{LaunchDir}/InteractiveInput.txt", 'a'))
 
                     if MinSel.lower() in ["yes", "y"]:
-                        StructRelax.StructRelax(StrucDir, OutPrefix, SolvEnv, InputDict)
+                        StructRelax.StructRelax(LaunchDir, StrucDir, OutPrefix, SolvEnv, InputDict)
                         break
                     elif MinSel.lower() in ["no", "n"]:
                         sys.exit(f"Use of a structurally relaxed geometry is hard-coded into the program. If you wish to override this best-practice, please rename your prepared {OutPrefix}.rst7 to min.rst7 and re-run this module of BioDC.\n")
