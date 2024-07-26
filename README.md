@@ -34,10 +34,13 @@ The BioDC workflow and the implemented methodologies are descirbed in the follow
 (7) Jiang, X.; van Wonderen, J. H.; Butt, J. N.; Edwards, M. J.; Clarke, T. A.; Blumberger, J. Which Multi-Heme Protein Complex Transfers Electrons More Efficiently? Comparing MtrCAB from Shewanella with OmcS from Geobacter. *J. Phys. Chem. Lett.* **2020**, 11 (21), 9421-9425. DOI: 10.1021/acs.jpclett.0c02842.
 
 ### Contributors
-Contributions of external code to the BioDC project is most gratefully appreciated. The following researchers have contributed code so far. 
- 
+Contributions to the BioDC project are most gratefully appreciated. I wish to acknowledge the following researchers and their contributions: 
+
+- Caleb L. Herron enabled BioDC to run either in interactive mode, where it records selected settings in a log file for reproducibility, or batch mode, where BioDC reads all needed settings from input.txt and asks for any that are missing.
+
 - Dr. Fredrik Jansson provided the Python implementation of the Derrida formula.
-- Prof. Jochen Blumberger and Dr. Xiuyun Jiang provided the Python implementaiton of the steady-state flux kinetic model.
+
+- Prof. Jochen Blumberger and Dr. Xiuyun Jiang provided the Python implementation of the steady-state flux kinetic model.
 
 ### How do I get started?
 
