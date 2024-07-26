@@ -20,8 +20,8 @@ elif (os.path.exists(f"{ProgDir}/Modules") == False) or (os.path.exists(f"{ProgD
  fix this problem.\n""")
 
 import StructurePreparationAndRelaxation as SPR
-import AntechamberToEnergeticEvalulation as A2EE
-import EnergeticEvalulation as EE
+import AntechamberToEnergeticEvaluation as A2EE
+import EnergeticEvaluation as EE
 import RedoxCurrentPrediction as RCP
 import ReadInput
 ################################################################################################################################################
@@ -47,8 +47,8 @@ print(f"""
                the computation of redox currents in
                 (polymeric) multi-heme cytochormes 
 
-              Written by Matthew J. Guberman-Pfeffer
-                  Last Updated: 12/20/2023
+    Written by Matthew J. Guberman-Pfeffer and Caleb L. Herron
+                  Last Updated: 7/15/2024
 
  Start time: {TimeStamp}
  Directory paths:
@@ -72,7 +72,7 @@ if (os.path.isfile(f"input.txt") == True):
     for key, value in InputDict.items():
         print(f"{key}: {value}")
 else:
-    InputDict = ''
+    InputDict = {}
 
 while True:
     try:
@@ -144,7 +144,7 @@ if (DivSel == 0) or (DivSel == 2):
 
     print("""
  ===================================================================  
- Antechamber to Energetic Evalulation 
+ Antechamber to Energetic Evaluation 
  ===================================================================\n""")
 
     try:
@@ -154,11 +154,17 @@ if (DivSel == 0) or (DivSel == 2):
         print(f""" Now, the current working directory is: {os.getcwd()}""")
     except FileExistsError:
         while True:
-            DirFate = input("""
+            if ("DirFate" in InputDict):
+                DirFate = InputDict["DirFate"]
+            else:
+                DirFate = input("""
    A directory named EE already exists. 
    It may have been created from a prior 
    session with BioDC. Would you like to 
    delete it and start over? """)
+
+            print(f"DirFate = {DirFate}", file=open("InteractiveInput.txt", 'a'))
+
             if ( DirFate == "YES" ) or ( DirFate == "Yes" ) or ( DirFate == "yes" ) or ( DirFate == "Y" ) or ( DirFate == "y" ):
                 shutil.rmtree("EE")
                 print("\n   Old directory deleted.")
@@ -176,23 +182,23 @@ if (DivSel == 0) or (DivSel == 2):
 
     if (DivSel == 0):
         StrucDir = f"{LaunchDir}/SPR"
-        PolySel, OutPrefix = A2EE.ReorderResByChain(StrucDir, OutPrefix)
-        A2EE.LinearizeHemeSequence(LaunchDir)
+        PolySel, OutPrefix = A2EE.ReorderResByChain(LaunchDir, StrucDir, OutPrefix, InputDict)
+        A2EE.LinearizeHemeSequence(LaunchDir, InputDict)
         print("""
  ===================================================================  
- Second: Energetic Evalulation
+ Second: Energetic Evaluation
  ===================================================================\n""", end=" ")
-        EE.EnergeticEvalulation(LaunchDir, ForceFieldDir, OutPrefix, SolvEnv, PolySel)
+        EE.EnergeticEvaluation(LaunchDir, ForceFieldDir, OutPrefix, SolvEnv, PolySel, InputDict)
 
     elif (DivSel == 2):
-        OutPrefix, SolvEnv, StrucDir = A2EE.PreparedStructureSelection(LaunchDir)
-        PolySel, OutPrefix = A2EE.ReorderResByChain(StrucDir, OutPrefix)
-        A2EE.LinearizeHemeSequence(LaunchDir)
+        OutPrefix, SolvEnv, StrucDir = A2EE.PreparedStructureSelection(LaunchDir, InputDict)
+        PolySel, OutPrefix = A2EE.ReorderResByChain(LaunchDir, StrucDir, OutPrefix, InputDict)
+        A2EE.LinearizeHemeSequence(LaunchDir, InputDict)
         print("""
  ===================================================================  
- Second: Energetic Evalulation
+ Second: Energetic Evaluation
  ===================================================================\n""", end=" ")
-        EE.EnergeticEvalulation(LaunchDir, ForceFieldDir, OutPrefix, SolvEnv, PolySel)
+        EE.EnergeticEvaluation(LaunchDir, ForceFieldDir, OutPrefix, SolvEnv, PolySel, InputDict)
 
 if (DivSel == 0) or (DivSel == 3):
     if (DivSel == 0):
@@ -210,11 +216,17 @@ if (DivSel == 0) or (DivSel == 3):
         print(f""" Now, the current working directory is: {os.getcwd()}""")
     except FileExistsError:
         while True:
-            DirFate = input("""
+            if ("DirFate" in InputDict):
+                DirFate = InputDict["DirFate"]
+            else:
+                DirFate = input("""
    A directory named RCP already exists. 
    It may have been created from a prior 
    session with BioDC. Would you like to 
    delete it and start over? """)
+
+            print(f"DirFate = {DirFate}|oai:code-citation|= {DirFate}", file=open("InteractiveInput.txt", 'a'))
+
             if ( DirFate == "YES" ) or ( DirFate == "Yes" ) or ( DirFate == "yes" ) or ( DirFate == "Y" ) or ( DirFate == "y" ):
                 shutil.rmtree("RCP")
                 print("\n   Old directory deleted.")
@@ -230,7 +242,7 @@ if (DivSel == 0) or (DivSel == 3):
             else:
                 print("Sorry, I didn't understand your response.")
 
-    RCP.RedoxCurrentPrediction(LaunchDir)
+    RCP.RedoxCurrentPrediction(LaunchDir, InputDict)
 
 if (DivSel != 0) and (DivSel != 1) and (DivSel != 2) and (DivSel != 3):
     sys.exit("""
