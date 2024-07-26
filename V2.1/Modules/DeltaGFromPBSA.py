@@ -7,8 +7,8 @@ from subprocess import Popen
 import DefineRefState
 import GenerateRedoxStateTopologies
 
-def DeltaGFromPBSA(ForceFieldDir, OutPrefix, SolvEnv, PolySel, InputDict):
-    SelRefRedoxState, FFchoice = DefineRefState.DefineRefState(ForceFieldDir, OutPrefix)
+def DeltaGFromPBSA(LaunchDir, ForceFieldDir, OutPrefix, SolvEnv, PolySel, InputDict):
+    SelRefRedoxState, FFchoice = DefineRefState.DefineRefState(LaunchDir, ForceFieldDir, OutPrefix, InputDict)
 
     print(f"""
  Starting from the reference state, oxidized- and 
@@ -17,14 +17,14 @@ def DeltaGFromPBSA(ForceFieldDir, OutPrefix, SolvEnv, PolySel, InputDict):
     GenerateRedoxStateTopologies.GenerateRedoxStateTopologies(ForceFieldDir, FFchoice, SelRefRedoxState)
 
     while True:
-        if "CompChoice" in InputDict:
-            CompChoice = InputDict["CompChoice"]
-            print(f"CompChoice = {CompChoice}", file=open("InteractiveInput.txt", 'a'))
+        if "DeltaGFromPBSACompChoice" in InputDict:
+            DeltaGFromPBSACompChoice = InputDict["DeltaGFromPBSACompChoice"]
+            print(f"DeltaGFromPBSACompChoice = {DeltaGFromPBSACompChoice}", file=open(f"{LaunchDir}/InteractiveInput.txt", 'a'))
         else:
-            CompChoice = input("\n Do you wish to run any needed computations in serial or parallel (s/p)? ")
-            print(f"CompChoice = {CompChoice}", file=open("InteractiveInput.txt", 'a'))
+            DeltaGFromPBSACompChoice = input("\n Do you wish to run any needed computations in serial or parallel (s/p)? ")
+            print(f"DeltaGFromPBSACompChoice = {DeltaGFromPBSACompChoice}", file=open(f"{LaunchDir}/InteractiveInput.txt", 'a'))
 
-        if CompChoice.lower() in ["serial", "s", "parallel", "p"]:
+        if DeltaGFromPBSACompChoice.lower() in ["serial", "s", "parallel", "p"]:
             break
         else:
             print(" Sorry, I didn't understand your choice. Please try again.")
@@ -46,11 +46,19 @@ def DeltaGFromPBSA(ForceFieldDir, OutPrefix, SolvEnv, PolySel, InputDict):
     idx = 0; idxc = 0; 
     with open("LinearizedHemeSequence.txt") as fp:
         x = len(fp.readlines())
-        HEM = [0]*x
-        epsin = [0]*x
-        epsout = [0]*x
-        RedoxState = [0]*2
-        command = [' ']*(2*x)
+        HEM         = [0]*x
+        SelEpsin    = [0]*x
+        epsin       = [0]*x
+        epsout      = [0]*x
+        istrng      = [0]*x
+        memb        = [0]*x
+        epsmem      = [0]*x
+        mthick      = [0]*x
+        SelPoretype = [0]*x
+        poretype    = [0]*x
+        SelDelphi   = [0]*x
+        RedoxState  = [0]*2
+        command     = [' ']*(2*x)
 
         fp.seek(0)
         Lines = fp.readlines()
@@ -60,40 +68,42 @@ def DeltaGFromPBSA(ForceFieldDir, OutPrefix, SolvEnv, PolySel, InputDict):
             if len(Es) != 0:
                 if idx == 0:
                     epsin[idx] = round(Es[idx], 3) 
-                    if "SelEpsin" in InputDict:
-                        SelEpsin = InputDict["SelEpsin"]
-                        print(f"SelEpsin = {SelEpsin}", file=open("InteractiveInput.txt", 'a'))
+                    if f"SelEpsin{idx}" in InputDict:
+                        SelEpsin[idx] = InputDict[f"SelEpsin{idx}"]
+                        print(f"SelEpsin{idx} = {SelEpsin[idx]}", file=open(f"{LaunchDir}/InteractiveInput.txt", 'a'))
                     else:
-                        SelEpsin = input(f""" 
+                        SelEpsin[idx] = input(f""" 
  The internal static dielectric constant for heme-{HEM[idx]} is {epsin[idx]}.
  Should this value be used? """)
-                        print(f"SelEpsin = {SelEpsin}", file=open("InteractiveInput.txt", 'a'))
+                        print(f"SelEpsin{idx} = {SelEpsin[idx]}", file=open(f"{LaunchDir}/InteractiveInput.txt", 'a'))
 
-                    if SelEpsin.lower() in ["no", "n"]:
+                    if SelEpsin[idx].lower() in ["no", "n"]:
                         while True:
                             try:
                                 epsin[idx] = round(float(input(f" What should the internal dielectric constant be for the PBSA calculation on heme-{HEM[idx]}? ")), 3)
+                                print(f"epsin{idx} = {epsin[idx]}", file=open(f"{LaunchDir}/InteractiveInput.txt", 'a'))
                             except ValueError:
                                 print(" Your entry needs to be a floating-poiint number.")
                             else:
                                 break
                 elif idx != 0 and idx != len(HEM) - 1:
                     epsin[idx] = round(((Es[idx-1] + Es[idx]) / 2), 3)
-                    if "SelEpsin" in InputDict:
-                        SelEpsin = InputDict["SelEpsin"]
-                        print(f"SelEpsin = {SelEpsin}", file=open("InteractiveInput.txt", 'a'))
+                    if f"SelEpsin{idx}" in InputDict:
+                        SelEpsin[idx] = InputDict[f"SelEpsin{idx}"]
+                        print(f"SelEpsin{idx} = {SelEpsin[idx]}", file=open(f"{LaunchDir}/InteractiveInput.txt", 'a'))
                     else:
-                        SelEpsin = input(f""" 
+                        SelEpsin[idx] = input(f""" 
  The internal static dielectric constant for heme-{HEM[idx]} is {epsin[idx]}.
    This value is an average of the static dielectric constants estimated for 
    the (i-1, i) and (i, i+1) heme pairs, where i = heme-{HEM[idx]}.
  Should this value be used? """)
-                        print(f"SelEpsin = {SelEpsin}", file=open("InteractiveInput.txt", 'a'))
+                        print(f"SelEpsin{idx} = {SelEpsin[idx]}", file=open(f"{LaunchDir}/InteractiveInput.txt", 'a'))
 
-                    if SelEpsin.lower() in ["no", "n"]:
+                    if SelEpsin[idx].lower() in ["no", "n"]:
                         while True:
                             try:
                                 epsin[idx] = round(float(input(f" What should the internal dielectric constant be for the PBSA calculation on heme-{HEM[idx]}? ")), 3)
+                                print(f"epsin{idx} = {epsin[idx]}", file=open(f"{LaunchDir}/InteractiveInput.txt", 'a'))
                             except ValueError:
                                 print(" Your entry needs to be a floating-poiint number.")
                             else:
@@ -103,11 +113,11 @@ def DeltaGFromPBSA(ForceFieldDir, OutPrefix, SolvEnv, PolySel, InputDict):
                         epsin[idx] = round(Es[len(Es)-1], 3)
                     if PolySel.lower() in ["yes", "y"]:
                         epsin[idx] = round(((Es[len(Es)-1] + Es[0]) / 2), 3)
-                    if "SelEpsin" in InputDict:
-                        SelEpsin = InputDict["SelEpsin"]
-                        print(f"SelEpsin = {SelEpsin}", file=open("InteractiveInput.txt", 'a'))
+                    if f"SelEpsin{idx}" in InputDict:
+                        SelEpsin[idx] = InputDict[f"SelEpsin{idx}"]
+                        print(f"SelEpsin{idx} = {SelEpsin[idx]}", file=open(f"{LaunchDir}/InteractiveInput.txt", 'a'))
                     else:
-                        SelEpsin = input(f""" 
+                        SelEpsin[idx] = input(f""" 
  The internal static dielectric constant for heme-{HEM[idx]} is {epsin[idx]}.
    This value is an average of the static dielectric constants estimated for 
    the (i-1, i) and (i, i+1) heme pairs, where i = heme-{HEM[idx]}.
@@ -126,73 +136,74 @@ def DeltaGFromPBSA(ForceFieldDir, OutPrefix, SolvEnv, PolySel, InputDict):
    value estimated for the last heme pair in the specified linear sequence.
    
  Should this value be used? """)
-                        print(f"SelEpsin = {SelEpsin}", file=open("InteractiveInput.txt", 'a'))
+                        print(f"SelEpsin{idx} = {SelEpsin[idx]}", file=open(f"{LaunchDir}/InteractiveInput.txt", 'a'))
 
-                    if SelEpsin.lower() in ["no", "n"]:
+                    if SelEpsin[idx].lower() in ["no", "n"]:
                         while True:
                             try:
                                 epsin[idx] = round(float(input(f" What should the internal dielectric constant be for the PBSA calculation on heme-{HEM[idx]}? ")), 3)
+                                print(f"epsin{idx} = {epsin[idx]}", file=open(f"{LaunchDir}/InteractiveInput.txt", 'a'))
                             except ValueError:
                                 print(" Your entry needs to be a floating-poiint number.")
                             else:
                                 break
             else:
-                if "epsin" in InputDict:
-                    epsin[idx] = round(float(InputDict["epsin"]), 3)
-                    print(f"epsin = {epsin[idx]}", file=open("InteractiveInput.txt", 'a'))
+                if f"epsin{idx}" in InputDict:
+                    epsin[idx] = round(float(InputDict[f"epsin{idx}"]), 3)
+                    print(f"epsin{idx} = {epsin[idx]}", file=open(f"{LaunchDir}/InteractiveInput.txt", 'a'))
                 else:
                     while True:
                         try:
                             epsin[idx] = round(float(input(f" What should the internal dielectric constant be for the PBSA calculation on heme-{HEM[idx]}? ")), 3)
-                            print(f"epsin = {epsin[idx]}", file=open("InteractiveInput.txt", 'a'))
+                            print(f"epsin{idx} = {epsin[idx]}", file=open(f"{LaunchDir}/InteractiveInput.txt", 'a'))
                         except ValueError:
                             print(" Your entry needs to be a floating-poiint number.")
                         else:
                             break
 
-            if "epsout" in InputDict:
-                epsout[idx] = round(float(InputDict["epsout"]), 3)
-                print(f"epsout = {epsout[idx]}", file=open("InteractiveInput.txt", 'a'))
+            if f"epsout{idx}" in InputDict:
+                epsout[idx] = round(float(InputDict[f"epsout{idx}"]), 3)
+                print(f"epsout{idx} = {epsout[idx]}", file=open(f"{LaunchDir}/InteractiveInput.txt", 'a'))
             else:
                 while True:
                     try:
                         epsout[idx] = round(float(input(f" What should the external dielectric constant be for heme-{HEM[idx]}? ")), 3)
-                        print(f"epsout = {epsout[idx]}", file=open("InteractiveInput.txt", 'a'))
+                        print(f"epsout{idx} = {epsout[idx]}", file=open(f"{LaunchDir}/InteractiveInput.txt", 'a'))
                     except ValueError:
                         print(" Your entry needs to be a floating-poiint number.")
                     else:
                         break
 
-            if "istrng" in InputDict:
-                istrng = float(InputDict["istrng"])
-                print(f"istrng = {istrng}", file=open("InteractiveInput.txt", 'a'))
+            if f"istrng{idx}" in InputDict:
+                istrng[idx] = float(InputDict[f"istrng{idx}"])
+                print(f"istrng{idx} = {istrng[idx]}", file=open(f"{LaunchDir}/InteractiveInput.txt", 'a'))
             else:
                 while True:
                     try:
-                        istrng = float(input(f" What ionic strength should be used in mM? "))
-                        print(f"istrng = {istrng}", file=open("InteractiveInput.txt", 'a'))
+                        istrng[idx] = float(input(f" What ionic strength should be used in mM? "))
+                        print(f"istrng{idx} = {istrng[idx]}", file=open(f"{LaunchDir}/InteractiveInput.txt", 'a'))
                     except ValueError:
                         print(" Your entry needs to be a floating-poiint number.")
                     else:
                         break
 
-            if "memb" in InputDict:
-                memb = InputDict["memb"]
-                print(f"memb = {memb}", file=open("InteractiveInput.txt", 'a'))
+            if f"memb{idx}" in InputDict:
+                memb[idx] = InputDict[f"memb{idx}"]
+                print(f"memb{idx} = {memb[idx]}", file=open(f"{LaunchDir}/InteractiveInput.txt", 'a'))
             else:
-                memb = input(f" Should there be an implicit slab membrane? ")
-                print(f"memb = {memb}", file=open("InteractiveInput.txt", 'a'))
+                memb[idx] = input(f" Should there be an implicit slab membrane? ")
+                print(f"memb{idx} = {memb[idx]}", file=open(f"{LaunchDir}/InteractiveInput.txt", 'a'))
 
-            if memb.lower() in ["yes", "y"]:
+            if memb[idx].lower() in ["yes", "y"]:
                 membraneopt = 1
-                if "epsmem" in InputDict:
-                    epsmem = float(InputDict["epsmem"])
-                    print(f"epsmem = {epsmem}", file=open("InteractiveInput.txt", 'a'))
+                if f"epsmem{idx}" in InputDict:
+                    epsmem[idx] = float(InputDict[f"epsmem{idx}"])
+                    print(f"epsmem{idx} = {epsmem[idx]}", file=open(f"{LaunchDir}/InteractiveInput.txt", 'a'))
                 else:
                     while True:
                         try:
-                            epsmem = float(input(f" What should be the value of the membrane dielectric constant? "))
-                            print(f"epsmem = {epsmem}", file=open("InteractiveInput.txt", 'a'))
+                            epsmem[idx] = float(input(f" What should be the value of the membrane dielectric constant? "))
+                            print(f"epsmem{idx} = {epsmem[idx]}", file=open(f"{LaunchDir}/InteractiveInput.txt", 'a'))
                         except ValueError:
                             print(" Your entry needs to be a floating-point number.")
                         else:
@@ -209,48 +220,48 @@ def DeltaGFromPBSA(ForceFieldDir, OutPrefix, SolvEnv, PolySel, InputDict):
                 maxitn = 200
                 nfocus = 1
 
-                if "mthick" in InputDict:
-                    mthick = float(InputDict["mthick"])
-                    print(f"mthick = {mthick}", file=open("InteractiveInput.txt", 'a'))
+                if f"mthick{idx}" in InputDict:
+                    mthick[idx] = float(InputDict[f"mthick{idx}"])
+                    print(f"mthick{idx} = {mthick[idx]}", file=open(f"{LaunchDir}/InteractiveInput.txt", 'a'))
                 else:
                     while True:
                         try:
-                            mthick = float(input(f" What is the thickness of the desired membrane (Å)? "))
-                            print(f"mthick = {mthick}", file=open("InteractiveInput.txt", 'a'))
+                            mthick[idx] = float(input(f" What is the thickness of the desired membrane (Å)? "))
+                            print(f"mthick{idx} = {mthick[idx]}", file=open(f"{LaunchDir}/InteractiveInput.txt", 'a'))
                         except ValueError:
                             print(" Your entry needs to be a floating-point number.")
                         else:
                             break
 
-                if "SelPoretype" in InputDict:
-                    SelPoretype = InputDict["SelPoretype"]
-                    print(f"SelPoretype = {SelPoretype}", file=open("InteractiveInput.txt", 'a'))
+                if f"SelPoretype{idx}" in InputDict:
+                    SelPoretype[idx] = InputDict[f"SelPoretype{idx}"]
+                    print(f"SelPoretype{idx} = {SelPoretype[idx]}", file=open(f"{LaunchDir}/InteractiveInput.txt", 'a'))
                 else:
                     while True:
-                        SelPoretype = input(f" Does the protein have a solvent-filled channel region that should be automatically detected (yes/no)? ")
-                        print(f"SelPoretype = {SelPoretype}", file=open("InteractiveInput.txt", 'a'))
-                        if SelPoretype.lower() in ["yes", "y"]:
-                            poretype = 1
+                        SelPoretype[idx] = input(f" Does the protein have a solvent-filled channel region that should be automatically detected (yes/no)? ")
+                        print(f"SelPoretype{idx} = {SelPoretype[idx]}", file=open(f"{LaunchDir}/InteractiveInput.txt", 'a'))
+                        if SelPoretype[idx].lower() in ["yes", "y"]:
+                            poretype[idx] = 1
                             break
-                        elif SelPoretype.lower() in ["no", "n"]:
-                            poretype = 0
+                        elif SelPoretype[idx].lower() in ["no", "n"]:
+                            poretype[idx] = 0
                             break
                         else:
                             print(" Sorry, I didn't understand your response.")
             else:
                 while True:
-                    if "SelDelphi" in InputDict:
-                        SelDelphi = InputDict["SelDelphi"]
-                        print(f"SelDelphi = {SelDelphi}", file=open("InteractiveInput.txt", 'a'))
+                    if f"SelDelphi{idx}" in InputDict:
+                        SelDelphi[idx] = InputDict[f"SelDelphi{idx}"]
+                        print(f"SelDelphi{idx} = {SelDelphi[idx]}", file=open(f"{LaunchDir}/InteractiveInput.txt", 'a'))
                     else:
-                        SelDelphi = input(f" Should a solution-phase Delphi-like calculation be performed? ")
-                        print(f"SelDelphi = {SelDelphi}", file=open("InteractiveInput.txt", 'a'))
+                        SelDelphi[idx] = input(f" Should a solution-phase Delphi-like calculation be performed? ")
+                        print(f"SelDelphi{idx} = {SelDelphi[idx]}", file=open(f"{LaunchDir}/InteractiveInput.txt", 'a'))
 
-                    if SelDelphi.lower() in ["yes", "y"]:
+                    if SelDelphi[idx].lower() in ["yes", "y"]:
                         membraneopt = 0
-                        poretype = 0
-                        mthick = 40.0
-                        epsmem = epsout[idx]
+                        poretype[idx] = 0
+                        mthick[idx] = 40.0
+                        epsmem[idx] = epsout[idx]
                         IPB = 1
                         INP = 0
                         ivalence = 1
@@ -263,11 +274,11 @@ def DeltaGFromPBSA(ForceFieldDir, OutPrefix, SolvEnv, PolySel, InputDict):
                         nfocus = 1
                         break
 
-                    elif SelDelphi.lower() in ["no", "n"]:
+                    elif SelDelphi[idx].lower() in ["no", "n"]:
                         membraneopt = 0
-                        poretype = 0
-                        mthick = 40.0
-                        epsmem = epsout[idx]
+                        poretype[idx] = 0
+                        mthick[idx] = 40.0
+                        epsmem[idx] = epsout[idx]
                         IPB = 2
                         INP = 2
                         ivalence = 0
@@ -299,14 +310,14 @@ def DeltaGFromPBSA(ForceFieldDir, OutPrefix, SolvEnv, PolySel, InputDict):
  &pb
   pbtemp=300,        ! Temperature for salt effects in PB equation 
   ivalence={ivalence},        ! 
-  istrng={istrng},      ! Ionic strength in mM for PB equation 
+  istrng={istrng[idx]},      ! Ionic strength in mM for PB equation 
   epsin={epsin[idx]},       ! Solute region dielectric constant 
   epsout={epsout[idx]},       ! Solvent region dielectric constant 
-  epsmem={epsmem},       ! Membrane dielectric constant
+  epsmem={epsmem[idx]},       ! Membrane dielectric constant
   membraneopt={membraneopt},     ! Turn off/on implicit slab membrane
-  mthick={mthick}    ! Membrane thickness in Å
+  mthick={mthick[idx]}    ! Membrane thickness in Å
   mctrdz=0,          ! Membrane center in Z direction Å; 0 = centered at center of protein 
-  poretype={poretype},        ! Turn off(0)/on(1) pore-searching algorithm
+  poretype={poretype[idx]},        ! Turn off(0)/on(1) pore-searching algorithm
   radiopt=0,         ! Atomic radii from topology used; optimized radius (choice 1) for FE is missing 
   dprob=1.4,         ! Solvent probe radius for molecular surface definition  
   iprob=2.0,         ! Mobile ion probe radius used to define the Stern layer. 
@@ -359,11 +370,11 @@ def DeltaGFromPBSA(ForceFieldDir, OutPrefix, SolvEnv, PolySel, InputDict):
  Found pbsa_{RedoxState[0]}{HEM[idx]}_epsin{epsin[idx]}_epsout{epsout[idx]}.out from a prior execution.
  This prior output will be used for the analysis.""")
                 else: 
-                    if CompChoice.lower() in ["serial", "s"]:
+                    if DeltaGFromPBSACompChoice.lower() in ["serial", "s"]:
                         print(f" Running PBSA calculation for {state}. Heme-{HEM[idx]} ...")
                         print(f"  pbsa -O -i pbsa-{HEM[idx]}_epsin{epsin[idx]}_epsout{epsout[idx]}.key -o pbsa_{RedoxState[0]}{HEM[idx]}_epsin{epsin[idx]}_epsout{epsout[idx]}.out -p {RedoxState[0]}{HEM[idx]}.prmtop -c {RedoxState[0]}{HEM[idx]}.rst7")
                         subprocess.run(f"pbsa -O -i pbsa-{HEM[idx]}_epsin{epsin[idx]}_epsout{epsout[idx]}.key -o pbsa_{RedoxState[0]}{HEM[idx]}_epsin{epsin[idx]}_epsout{epsout[idx]}.out -p {RedoxState[0]}{HEM[idx]}.prmtop -c {RedoxState[0]}{HEM[idx]}.rst7", shell=True)
-                    if CompChoice.lower() in ["parallel", "p"]:
+                    if DeltaGFromPBSACompChoice.lower() in ["parallel", "p"]:
                         command[idxc] = f"pbsa -O -i pbsa-{HEM[idx]}_epsin{epsin[idx]}_epsout{epsout[idx]}.key -o pbsa_{RedoxState[0]}{HEM[idx]}_epsin{epsin[idx]}_epsout{epsout[idx]}.out -p {RedoxState[0]}{HEM[idx]}.prmtop -c {RedoxState[0]}{HEM[idx]}.rst7"
                         idxc += 1
 

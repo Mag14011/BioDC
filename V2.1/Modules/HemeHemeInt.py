@@ -12,14 +12,14 @@ import PairedChargeAssignment
 import ReadInput
 ################################################################################################################################################
 
-def HemeHemeInt(ForceFieldDir, FFchoice, OutPrefix, SelRefRedoxState, InputDict):
+def HemeHemeInt(LaunchDir, ForceFieldDir, FFchoice, OutPrefix, SelRefRedoxState, InputDict):
 
     if not os.path.isfile("RefState.prmtop"):
         print("""
  Generating the reference state topology where all hemes
  are in the reduced state.
  """)
-        SelRefRedoxState = DefineRefState(OutPrefix, InputDict)
+        SelRefRedoxState = DefineRefState(LaunchDir, OutPrefix, InputDict)
     else:
         print("""
  Found RefState.prmtop
@@ -41,7 +41,7 @@ def HemeHemeInt(ForceFieldDir, FFchoice, OutPrefix, SelRefRedoxState, InputDict)
             while True:
                 if "SelEpsin" in InputDict:
                     SelEpsin = InputDict["SelEpsin"]
-                    print(f"SelEpsin = {SelEpsin}", file=open("InteractiveInput.txt", 'a'))
+                    print(f"SelEpsin = {SelEpsin}", file=open(f"{LaunchDir}/InteractiveInput.txt", 'a'))
                 else:
                     SelEpsin = str(input(f""" 
  The internal dielectric constants range from {min_epsin} to {max_epsin}
@@ -52,7 +52,7 @@ def HemeHemeInt(ForceFieldDir, FFchoice, OutPrefix, SelRefRedoxState, InputDict)
 
  Would you like to use this average value for the PBSA calculations to
  compute heme-heme interactions? """))
-                    print(f"SelEpsin = {SelEpsin}", file=open("InteractiveInput.txt", 'a'))
+                    print(f"SelEpsin = {SelEpsin}", file=open(f"{LaunchDir}/InteractiveInput.txt", 'a'))
 
                 if SelEpsin.lower() in ["yes", "y"]:
                     epsin = avg_epsin
@@ -61,12 +61,12 @@ def HemeHemeInt(ForceFieldDir, FFchoice, OutPrefix, SelRefRedoxState, InputDict)
                     while True:
                         if "epsin" in InputDict:
                             epsin = InputDict["epsin"]
-                            print(f"epsin = {epsin}", file=open("InteractiveInput.txt", 'a'))
+                            print(f"epsin = {epsin}", file=open(f"{LaunchDir}/InteractiveInput.txt", 'a'))
                             break
                         else:
                             try:
                                 epsin = round(float(input(" What should the average internal static dielectric constant be? ")), 3)
-                                print(f"epsin = {epsin}", file=open("InteractiveInput.txt", 'a'))
+                                print(f"epsin = {epsin}", file=open(f"{LaunchDir}/InteractiveInput.txt", 'a'))
                                 break
                             except ValueError:
                                 print(" Your entry needs to be a floating-poiint number.")
@@ -78,7 +78,7 @@ def HemeHemeInt(ForceFieldDir, FFchoice, OutPrefix, SelRefRedoxState, InputDict)
             while True:
                 if "epsin" in InputDict:
                     epsin = InputDict["epsin"]
-                    print(f"epsin = {epsin}", file=open("InteractiveInput.txt", 'a'))
+                    print(f"epsin = {epsin}", file=open(f"{LaunchDir}/InteractiveInput.txt", 'a'))
                 else:
                     try:
                         epsin = round(float(input(""" 
@@ -88,7 +88,7 @@ def HemeHemeInt(ForceFieldDir, FFchoice, OutPrefix, SelRefRedoxState, InputDict)
  compute reorganization energies.
 
  What value would you like to use? """)), 3)
-                        print(f"epsin = {epsin}", file=open("InteractiveInput.txt", 'a'))
+                        print(f"epsin = {epsin}", file=open(f"{LaunchDir}/InteractiveInput.txt", 'a'))
                         break
                     except ValueError:
                         print(" Your entry needs to be a floating-poiint number.")
@@ -98,7 +98,7 @@ def HemeHemeInt(ForceFieldDir, FFchoice, OutPrefix, SelRefRedoxState, InputDict)
         while True:
             if "epsin" in InputDict:
                 epsin = InputDict["epsin"]
-                print(f"epsin = {epsin}", file=open("InteractiveInput.txt", 'a'))
+                print(f"epsin = {epsin}", file=open(f"{LaunchDir}/InteractiveInput.txt", 'a'))
             else:
                 try:
                     epsin = round(float(input(""" 
@@ -107,7 +107,7 @@ def HemeHemeInt(ForceFieldDir, FFchoice, OutPrefix, SelRefRedoxState, InputDict)
  Lambda.txt because the file does not exist. 
 
  what value would you like to use? """)), 3)
-                    print(f"epsin = {epsin}", file=open("InteractiveInput.txt", 'a'))
+                    print(f"epsin = {epsin}", file=open(f"{LaunchDir}/InteractiveInput.txt", 'a'))
                     break
                 except ValueError:
                     print(" Your entry needs to be a floating-poiint number.")
@@ -116,11 +116,11 @@ def HemeHemeInt(ForceFieldDir, FFchoice, OutPrefix, SelRefRedoxState, InputDict)
     while True:
         if "epsout" in InputDict:
             epsout = InputDict["epsout"]
-            print(f"epsout = {epsout}", file=open("InteractiveInput.txt", 'a'))
+            print(f"epsout = {epsout}", file=open(f"{LaunchDir}/InteractiveInput.txt", 'a'))
         else:
             try:
                 epsout = round(float(input(" What should the external static dielectric be? ")), 3)
-                print(f"epsout = {epsout}", file=open("InteractiveInput.txt", 'a'))
+                print(f"epsout = {epsout}", file=open(f"{LaunchDir}/InteractiveInput.txt", 'a'))
                 break
             except ValueError:
                 print(" Your entry needs to be a floating-poiint number.")
@@ -129,11 +129,11 @@ def HemeHemeInt(ForceFieldDir, FFchoice, OutPrefix, SelRefRedoxState, InputDict)
     while True:
         if "istrng" in InputDict:
             istrng = InputDict["istrng"]
-            print(f"istrng = {istrng}", file=open("InteractiveInput.txt", 'a'))
+            print(f"istrng = {istrng}", file=open(f"{LaunchDir}/InteractiveInput.txt", 'a'))
         else:
             try:
                 istrng = float(input(f" What ionic strength should be used in mM? "))
-                print(f"istrng = {istrng}", file=open("InteractiveInput.txt", 'a'))
+                print(f"istrng = {istrng}", file=open(f"{LaunchDir}/InteractiveInput.txt", 'a'))
                 break
             except ValueError:
                 print(" Your entry needs to be a floating-poiint number.")
@@ -142,10 +142,10 @@ def HemeHemeInt(ForceFieldDir, FFchoice, OutPrefix, SelRefRedoxState, InputDict)
     while True:
         if "memb" in InputDict:
             memb = InputDict["memb"]
-            print(f"memb = {memb}", file=open("InteractiveInput.txt", 'a'))
+            print(f"memb = {memb}", file=open(f"{LaunchDir}/InteractiveInput.txt", 'a'))
         else:
             memb = input(f" Should there be an implicit slab membrane? ")
-            print(f"memb = {memb}", file=open("InteractiveInput.txt", 'a'))
+            print(f"memb = {memb}", file=open(f"{LaunchDir}/InteractiveInput.txt", 'a'))
 
         if memb.lower() in ["yes", "y"]:
             membraneopt = 1
@@ -153,11 +153,11 @@ def HemeHemeInt(ForceFieldDir, FFchoice, OutPrefix, SelRefRedoxState, InputDict)
             while True:
                 if "epsmem" in InputDict:
                     epsmem = InputDict["epsmem"]
-                    print(f"epsmem = {epsmem}", file=open("InteractiveInput.txt", 'a'))
+                    print(f"epsmem = {epsmem}", file=open(f"{LaunchDir}/InteractiveInput.txt", 'a'))
                 else:
                     try:
                         epsmem = float(input(f" What should be the value of the membrane dielectric constant? "))
-                        print(f"epsmem = {epsmem}", file=open("InteractiveInput.txt", 'a'))
+                        print(f"epsmem = {epsmem}", file=open(f"{LaunchDir}/InteractiveInput.txt", 'a'))
                         break
                     except ValueError:
                         print(" Your entry needs to be a floating-poiint number.")
@@ -177,11 +177,11 @@ def HemeHemeInt(ForceFieldDir, FFchoice, OutPrefix, SelRefRedoxState, InputDict)
             while True:
                 if "mthick" in InputDict:
                     mthick = InputDict["mthick"]
-                    print(f"mthick = {mthick}", file=open("InteractiveInput.txt", 'a'))
+                    print(f"mthick = {mthick}", file=open(f"{LaunchDir}/InteractiveInput.txt", 'a'))
                 else:
                     try:
                         mthick = float(input(f" What is the thickness of the desired membrane (Å)? "))
-                        print(f"mthick = {mthick}", file=open("InteractiveInput.txt", 'a'))
+                        print(f"mthick = {mthick}", file=open(f"{LaunchDir}/InteractiveInput.txt", 'a'))
                         break
                     except ValueError:
                         print(" Your entry needs to be a floating-poiint number.")
@@ -190,10 +190,10 @@ def HemeHemeInt(ForceFieldDir, FFchoice, OutPrefix, SelRefRedoxState, InputDict)
             while True:
                 if "SelPoretype" in InputDict:
                     SelPoretype = InputDict["SelPoretype"]
-                    print(f"SelPoretype = {SelPoretype}", file=open("InteractiveInput.txt", 'a'))
+                    print(f"SelPoretype = {SelPoretype}", file=open(f"{LaunchDir}/InteractiveInput.txt", 'a'))
                 else:
                     SelPoretype = input(f" Does the protein have a solvent-filled channel region that should be automatically detected? ")
-                    print(f"SelPoretype = {SelPoretype}", file=open("InteractiveInput.txt", 'a'))
+                    print(f"SelPoretype = {SelPoretype}", file=open(f"{LaunchDir}/InteractiveInput.txt", 'a'))
                 if SelPoretype.lower() in ["yes", "y"]:
                     poretype = 1
                     break
@@ -207,10 +207,10 @@ def HemeHemeInt(ForceFieldDir, FFchoice, OutPrefix, SelRefRedoxState, InputDict)
             while True:
                 if "SelDelphi" in InputDict:
                     SelDelphi = InputDict["SelDelphi"]
-                    print(f"SelDelphi = {SelDelphi}", file=open("InteractiveInput.txt", 'a'))
+                    print(f"SelDelphi = {SelDelphi}", file=open(f"{LaunchDir}/InteractiveInput.txt", 'a'))
                 else:
                     SelDelphi = input(f" Should a solution-phease Delphi-like calculation be performed? ")
-                    print(f"SelDelphi = {SelDelphi}", file=open("InteractiveInput.txt", 'a'))
+                    print(f"SelDelphi = {SelDelphi}", file=open(f"{LaunchDir}/InteractiveInput.txt", 'a'))
 
                 if SelDelphi.lower() in ["yes", "y"]:
                     membraneopt = 0
@@ -318,14 +318,14 @@ def HemeHemeInt(ForceFieldDir, FFchoice, OutPrefix, SelRefRedoxState, InputDict)
         """, file=open(f"pbsa_epsin{epsin}_epsout{epsout}.key", 'w'))
 
     while True:
-        if "CompChoice" in InputDict:
-            CompChoice = InputDict["CompChoice"]
-            print(f"CompChoice = {CompChoice}", file=open("InteractiveInput.txt", 'a'))
+        if "HemeHemeIntCompChoice" in InputDict:
+            HemeHemeIntCompChoice = InputDict["HemeHemeIntCompChoice"]
+            print(f"HemeHemeIntCompChoice = {HemeHemeIntCompChoice}", file=open(f"{LaunchDir}/InteractiveInput.txt", 'a'))
         else:
-            CompChoice = input(" Do you wish to run any needed computations in serial or parallel (s/p)? ")
-            print(f"CompChoice = {CompChoice}", file=open("InteractiveInput.txt", 'a'))
+            HemeHemeIntCompChoice = input(" Do you wish to run any needed computations in serial or parallel (s/p)? ")
+            print(f"HemeHemeIntCompChoice = {HemeHemeIntCompChoice}", file=open(f"{LaunchDir}/InteractiveInput.txt", 'a'))
 
-        if CompChoice.lower() in ["serial", "s", "parallel", "p"]:
+        if HemeHemeIntCompChoice.lower() in ["serial", "s", "parallel", "p"]:
             break
         else:
             print(" Sorry, I didn't understand your choice. Please try again.")
@@ -429,11 +429,11 @@ def HemeHemeInt(ForceFieldDir, FFchoice, OutPrefix, SelRefRedoxState, InputDict)
                         print(f""" 
  Did not find pbsa_{k}{Hi}-{l}{Hj}_epsin{epsin}_epsout{epsout}.out from a prior execution.
  The calculation will be submitted.""")
-                        if CompChoice.lower() in ["serial", "s"]:
+                        if HemeHemeIntCompChoice.lower() in ["serial", "s"]:
                             print(f" Running PBSA calculation for {k}{Hi}-{l}{Hj} with epsin {epsin} and epsout {epsout}...")
                             print(f"  pbsa -O -i pbsa_epsin{epsin}_epsout{epsout}.key -o pbsa_{k}{Hi}-{l}{Hj}_epsin{epsin}_epsout{epsout}.out -p {k}{Hi}-{l}{Hj}.prmtop -c {k}{Hi}-{l}{Hj}.rst7")
                             subprocess.run(f"pbsa -O -i pbsa_epsin{epsin}_epsout{epsout}.key -o pbsa_{k}{Hi}-{l}{Hj}_epsin{epsin}_epsout{epsout}.out -p {k}{Hi}-{l}{Hj}.prmtop -c {k}{Hi}-{l}{Hj}.rst7", shell=True)
-                        elif CompChoice.lower() in ["parallel", "p"]:
+                        elif HemeHemeIntCompChoice.lower() in ["parallel", "p"]:
                             command[idxc] = f"pbsa -O -i pbsa_epsin{epsin}_epsout{epsout}.key -o pbsa_{k}{Hi}-{l}{Hj}_epsin{epsin}_epsout{epsout}.out -p {k}{Hi}-{l}{Hj}.prmtop -c {k}{Hi}-{l}{Hj}.rst7"
                             idxc += 1
 

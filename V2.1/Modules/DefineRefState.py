@@ -4,15 +4,15 @@ import sys
 import subprocess
 from subprocess import Popen
 
-def DefineRefState(ForceFieldDir, OutPrefix, InputDict):
+def DefineRefState(LaunchDir, ForceFieldDir, OutPrefix, InputDict):
 
     while True:
         if "ChooseRef" in InputDict:
             ChooseRef = InputDict["ChooseRef"]
-            print(f"ChooseRef = {ChooseRef}", file=open("InteractiveInput.txt", 'a'))
+            print(f"ChooseRef = {ChooseRef}", file=open(f"{LaunchDir}/InteractiveInput.txt", 'a'))
         else:
             ChooseRef = input(" Should the reference state be all-hemes oxidized (ox) or all-hemes reduced (red)? ")
-            print(f"ChooseRef = {ChooseRef}", file=open("InteractiveInput.txt", 'a'))
+            print(f"ChooseRef = {ChooseRef}", file=open(f"{LaunchDir}/InteractiveInput.txt", 'a'))
 
         if ChooseRef.lower() in ["ox", "o"]:
             SelRefRedoxState = "O"
@@ -312,7 +312,7 @@ def DefineRefState(ForceFieldDir, OutPrefix, InputDict):
         while True:
             if "FFchoice" in InputDict:
                 FFchoice = InputDict["FFchoice"]
-                print(f"FFchoice = {FFchoice}", file=open("InteractiveInput.txt", 'a'))
+                print(f"FFchoice = {FFchoice}", file=open(f"{LaunchDir}/InteractiveInput.txt", 'a'))
             else:
                 FFchoice = input("""
  Do you wish to use the previously published set of atomic 
@@ -333,7 +333,7 @@ def DefineRefState(ForceFieldDir, OutPrefix, InputDict):
           second row elements.)
  
  Please Henriques (H) or Guberman-Pfeffer (GP) charge sets: """)
-                print(f"FFchoice = {FFchoice}", file=open("InteractiveInput.txt", 'a'))
+                print(f"FFchoice = {FFchoice}", file=open(f"{LaunchDir}/InteractiveInput.txt", 'a'))
 
             if FFchoice.lower() in ["henriques", "h"]:
                 print(f"""
@@ -352,7 +352,7 @@ def DefineRefState(ForceFieldDir, OutPrefix, InputDict):
         while True:
             if "FFchoice" in InputDict:
                 FFchoice = InputDict["FFchoice"]
-                print(f"FFchoice = {FFchoice}", file=open("InteractiveInput.txt", 'a'))
+                print(f"FFchoice = {FFchoice}", file=open(f"{LaunchDir}/InteractiveInput.txt", 'a'))
             else:
                 FFchoice = input("""
  Do you wish to use the previously published set of atomic 
@@ -373,7 +373,7 @@ def DefineRefState(ForceFieldDir, OutPrefix, InputDict):
           second row elements.)
  
  Please Henriques (H) or Guberman-Pfeffer (GP) charge sets: """)
-                print(f"FFchoice = {FFchoice}", file=open("InteractiveInput.txt", 'a'))
+                print(f"FFchoice = {FFchoice}", file=open(f"{LaunchDir}/InteractiveInput.txt", 'a'))
 
             if FFchoice.lower() in ["henriques", "h"]:
                 print(f"""

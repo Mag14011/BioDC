@@ -40,14 +40,14 @@ Energy Minimization Stage in Explicit Solvent
             """, file=open('min.in', 'w'))
 
             while True:
-                if "CompChoice" in InputDict:
-                    CompChoice = InputDict["CompChoice"]
-                    print(f"CompChoice = {CompChoice}", file=open("InteractiveInput.txt", 'a'))
+                if "StructRelaxCompChoice" in InputDict:
+                    StructRelaxCompChoice = InputDict["StructRelaxCompChoice"]
+                    print(f"StructRelaxCompChoice = {StructRelaxCompChoice}", file=open("InteractiveInput.txt", 'a'))
                 else:
-                    CompChoice = input("\nRun the minimization using SANDER (S) or PMEMD (P)? ")
-                    print(f"CompChoice = {CompChoice}", file=open("InteractiveInput.txt", 'a'))
+                    StructRelaxCompChoice = input("\nRun the minimization using SANDER (S) or PMEMD (P)? ")
+                    print(f"StructRelaxCompChoice = {StructRelaxCompChoice}", file=open("InteractiveInput.txt", 'a'))
 
-                if CompChoice.lower() in ["sander", "s"]:
+                if StructRelaxCompChoice.lower() in ["sander", "s"]:
                     print("Running minimization ...")
                     if os.path.isfile(f"{OutPrefix}_new.prmtop"):
                         subprocess.run(f"sander -O -i min.in -o min.out -p {OutPrefix}_new.prmtop -c {OutPrefix}_reord.rst7 -inf min.mdinfo -r min.rst7 -ref {OutPrefix}_reord.rst7", shell=True)
@@ -57,7 +57,7 @@ Energy Minimization Stage in Explicit Solvent
                         subprocess.run(f"sander -O -i min.in -o min.out -p {OutPrefix}.prmtop -c {OutPrefix}.rst7 -inf min.mdinfo -r min.rst7 -ref {OutPrefix}.rst7", shell=True)
                     print("Minimization finished!")
                     break
-                elif CompChoice.lower() in ["pmemd", "p"]:
+                elif StructRelaxCompChoice.lower() in ["pmemd", "p"]:
                     while True:
                         if "NProc" in InputDict:
                             NProc = InputDict["NProc"]
@@ -66,6 +66,7 @@ Energy Minimization Stage in Explicit Solvent
                         else:
                             NProc = input("Parallelize the minimization over how many CPUs? ")
                             print(f"NProc = {NProc}", file=open("InteractiveInput.txt", 'a'))
+                            break
 
                     print("Running minimization ...")
                     if os.path.isfile(f"{OutPrefix}_new.prmtop"):
@@ -102,14 +103,14 @@ Energy Minimization in Implicit Solvent
             """, file=open('min.in', 'w'))
 
             while True:
-                if "CompChoice" in InputDict:
-                    CompChoice = InputDict["CompChoice"]
-                    print(f"CompChoice = {CompChoice}", file=open("InteractiveInput.txt", 'a'))
+                if "StructRelaxCompChoice" in InputDict:
+                    StructRelaxCompChoice = InputDict["StructRelaxCompChoice"]
+                    print(f"StructRelaxCompChoice = {StructRelaxCompChoice}", file=open("InteractiveInput.txt", 'a'))
                 else:
-                    CompChoice = input("\nRun the minimization using SANDER (S) or PMEMD (P)? ")
-                    print(f"CompChoice = {CompChoice}", file=open("InteractiveInput.txt", 'a'))
+                    StructRelaxCompChoice = input("\nRun the minimization using SANDER (S) or PMEMD (P)? ")
+                    print(f"StructRelaxCompChoice = {StructRelaxCompChoice}", file=open("InteractiveInput.txt", 'a'))
 
-                if CompChoice.lower() in ["sander", "s"]:
+                if StructRelaxCompChoice.lower() in ["sander", "s"]:
                     print("Running minimization ...")
                     if os.path.isfile(f"{OutPrefix}_new.prmtop"):
                         subprocess.run(f"sander -O -i min.in -o min.out -p {OutPrefix}_new.prmtop -c {OutPrefix}_reord.rst7 -inf min.mdinfo -r min.rst7 -ref {OutPrefix}_reord.rst7", shell=True)
@@ -119,7 +120,7 @@ Energy Minimization in Implicit Solvent
                         subprocess.run(f"sander -O -i min.in -o min.out -p {OutPrefix}.prmtop -c {OutPrefix}.rst7 -inf min.mdinfo -r min.rst7 -ref {OutPrefix}.rst7", shell=True)
                     print("Minimization finished!")
                     break
-                elif CompChoice.lower() in ["pmemd", "p"]:
+                elif StructRelaxCompChoice.lower() in ["pmemd", "p"]:
                     while True:
                         if "NProc" in InputDict:
                             NProc = InputDict["NProc"]
