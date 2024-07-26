@@ -7,39 +7,43 @@ import subprocess
 from subprocess import Popen
 ################################################################################################################################################
 # Custom Modules 
+import DefineRefState
 import PairedChargeAssignment
+import ReadInput
 ################################################################################################################################################
 
-def HemeHemeInt(ForceFieldDir, FFchoice, OutPrefix, SelRefRedoxState):
+def HemeHemeInt(ForceFieldDir, FFchoice, OutPrefix, SelRefRedoxState, InputDict):
 
-    if (os.path.isfile(f"RefState.prmtop") == False):
+    if not os.path.isfile("RefState.prmtop"):
         print("""
  Generating the reference state topology where all hemes
  are in the reduced state.
  """)
-        SelRefRedoxState = DefineRefState(OutPrefix)
-    elif (os.path.isfile(f"RefState.prmtop") == True):
+        SelRefRedoxState = DefineRefState(OutPrefix, InputDict)
+    else:
         print("""
  Found RefState.prmtop
  """)
 
     Es = []
-    if (os.path.isfile("Lambda.txt") == True):
+    if os.path.isfile("Lambda.txt"):
         with open('Lambda.txt', 'r') as fp:
             lines = fp.readlines()
             for line in lines:
-                word1 = 'Es        ='
-
-                if (line.find(word1) != -1):
+                if 'Es        =' in line:
                     Es.append(float(line.strip().split()[2]))
 
-        if(len(Es) != 0):
+        if Es:
             min_epsin = round(min(Es), 3)
             max_epsin = round(max(Es), 3)
-            avg_epsin = round((sum(Es)/len(Es)), 3) 
+            avg_epsin = round(sum(Es) / len(Es), 3)
 
             while True:
-                SelEpsin = str(input(f""" 
+                if "SelEpsin" in InputDict:
+                    SelEpsin = InputDict["SelEpsin"]
+                    print(f"SelEpsin = {SelEpsin}", file=open("InteractiveInput.txt", 'a'))
+                else:
+                    SelEpsin = str(input(f""" 
  The internal dielectric constants range from {min_epsin} to {max_epsin}
  The average internal dielectric constant is {avg_epsin}
  
@@ -48,84 +52,116 @@ def HemeHemeInt(ForceFieldDir, FFchoice, OutPrefix, SelRefRedoxState):
 
  Would you like to use this average value for the PBSA calculations to
  compute heme-heme interactions? """))
-                if (SelEpsin == "YES") or (SelEpsin == "Yes") or (SelEpsin == "yes") or (SelEpsin == "Y") or (SelEpsin == "y"):
+                    print(f"SelEpsin = {SelEpsin}", file=open("InteractiveInput.txt", 'a'))
+
+                if SelEpsin.lower() in ["yes", "y"]:
                     epsin = avg_epsin
                     break
-
-                elif (SelEpsin == "NO") or (SelEpsin == "No") or (SelEpsin == "no") or (SelEpsin == "N") or (SelEpsin == "n"):
+                elif SelEpsin.lower() in ["no", "n"]:
                     while True:
-                        try:
-                            epsin = round(float(input(" What should the average internal static dielectric constant be? ")), 3)
-                        except ValueError:
-                            print(" Your entry needs to be a floating-poiint number.")
-                        else:
+                        if "epsin" in InputDict:
+                            epsin = InputDict["epsin"]
+                            print(f"epsin = {epsin}", file=open("InteractiveInput.txt", 'a'))
                             break
-                        break
+                        else:
+                            try:
+                                epsin = round(float(input(" What should the average internal static dielectric constant be? ")), 3)
+                                print(f"epsin = {epsin}", file=open("InteractiveInput.txt", 'a'))
+                                break
+                            except ValueError:
+                                print(" Your entry needs to be a floating-poiint number.")
                     break
                 else:
                     print(" Sorry, I didn't understand your response.")
 
-        if(len(Es) == 0):
+        if not Es:
             while True:
-                try:
-                    epsin = round(float(input(""" 
+                if "epsin" in InputDict:
+                    epsin = InputDict["epsin"]
+                    print(f"epsin = {epsin}", file=open("InteractiveInput.txt", 'a'))
+                else:
+                    try:
+                        epsin = round(float(input(""" 
  An average interior static dielectric constant
  cannot be assigned for the PBSA calculations from 
  Lambda.txt because you choose to enter, instead of
  compute reorganization energies.
 
  What value would you like to use? """)), 3)
-                except ValueError:
-                    print(" Your entry needs to be a floating-poiint number.")
-                else:
-                    break
+                        print(f"epsin = {epsin}", file=open("InteractiveInput.txt", 'a'))
+                        break
+                    except ValueError:
+                        print(" Your entry needs to be a floating-poiint number.")
                 break
 
-    elif (os.path.isfile("Lambda.txt") == False):
+    elif not os.path.isfile("Lambda.txt"):
         while True:
-            try:
-                epsin = round(float(input(""" 
+            if "epsin" in InputDict:
+                epsin = InputDict["epsin"]
+                print(f"epsin = {epsin}", file=open("InteractiveInput.txt", 'a'))
+            else:
+                try:
+                    epsin = round(float(input(""" 
  An average interior static dielectric constant
  cannot be assigned for the PBSA calculations from 
  Lambda.txt because the file does not exist. 
 
  what value would you like to use? """)), 3)
-            except ValueError:
-                print(" Your entry needs to be a floating-poiint number.")
-            else:
-                break
+                    print(f"epsin = {epsin}", file=open("InteractiveInput.txt", 'a'))
+                    break
+                except ValueError:
+                    print(" Your entry needs to be a floating-poiint number.")
             break
 
     while True:
-        try:
-            epsout = round(float(input(" What should the external static dielectric be? ")), 3)
-        except ValueError:
-            print(" Your entry needs to be a floating-poiint number.")
+        if "epsout" in InputDict:
+            epsout = InputDict["epsout"]
+            print(f"epsout = {epsout}", file=open("InteractiveInput.txt", 'a'))
         else:
-            break
+            try:
+                epsout = round(float(input(" What should the external static dielectric be? ")), 3)
+                print(f"epsout = {epsout}", file=open("InteractiveInput.txt", 'a'))
+                break
+            except ValueError:
+                print(" Your entry needs to be a floating-poiint number.")
         break
 
     while True:
-        try:
-            istrng = float(input(f" What ionic strength should be used in mM? "))
-        except ValueError:
-            print(" Your entry needs to be a floating-poiint number.")
+        if "istrng" in InputDict:
+            istrng = InputDict["istrng"]
+            print(f"istrng = {istrng}", file=open("InteractiveInput.txt", 'a'))
         else:
-            break
-   
-    while True:
-        memb = input(f" Should there be an implicit slab membrane? ")
+            try:
+                istrng = float(input(f" What ionic strength should be used in mM? "))
+                print(f"istrng = {istrng}", file=open("InteractiveInput.txt", 'a'))
+                break
+            except ValueError:
+                print(" Your entry needs to be a floating-poiint number.")
+        break
 
-        if (memb == "YES") or (memb == "Yes") or (memb == "yes") or (memb == "Y") or (memb == "y"):
+    while True:
+        if "memb" in InputDict:
+            memb = InputDict["memb"]
+            print(f"memb = {memb}", file=open("InteractiveInput.txt", 'a'))
+        else:
+            memb = input(f" Should there be an implicit slab membrane? ")
+            print(f"memb = {memb}", file=open("InteractiveInput.txt", 'a'))
+
+        if memb.lower() in ["yes", "y"]:
             membraneopt = 1
 
             while True:
-                try:
-                    epsmem = float(input(f" What should be the value of the membrane dielectric constant? "))
-                except ValueError:
-                    print(" Your entry needs to be a floating-poiint number.")
+                if "epsmem" in InputDict:
+                    epsmem = InputDict["epsmem"]
+                    print(f"epsmem = {epsmem}", file=open("InteractiveInput.txt", 'a'))
                 else:
-                    break
+                    try:
+                        epsmem = float(input(f" What should be the value of the membrane dielectric constant? "))
+                        print(f"epsmem = {epsmem}", file=open("InteractiveInput.txt", 'a'))
+                        break
+                    except ValueError:
+                        print(" Your entry needs to be a floating-poiint number.")
+                break
 
             IPB = 1
             INP = 0
@@ -139,29 +175,44 @@ def HemeHemeInt(ForceFieldDir, FFchoice, OutPrefix, SelRefRedoxState):
             nfocus = 1
 
             while True:
-                try:
-                    mthick = float(input(f" What is the thickness of the desired membrane (Å)? "))
-                except ValueError:
-                    print(" Your entry needs to be a floating-poiint number.")
+                if "mthick" in InputDict:
+                    mthick = InputDict["mthick"]
+                    print(f"mthick = {mthick}", file=open("InteractiveInput.txt", 'a'))
                 else:
-                    break
+                    try:
+                        mthick = float(input(f" What is the thickness of the desired membrane (Å)? "))
+                        print(f"mthick = {mthick}", file=open("InteractiveInput.txt", 'a'))
+                        break
+                    except ValueError:
+                        print(" Your entry needs to be a floating-poiint number.")
+                break
 
             while True:
-                SelPoretype = input(f" Does the protein have a solvent-filled channel region that should be automatically detected? ")
-                if (SelPoretype == "YES") or (SelPoretype == "Yes") or (SelPoretype == "yes") or (SelPoretype == "Y") or (SelPoretype == "y"):
+                if "SelPoretype" in InputDict:
+                    SelPoretype = InputDict["SelPoretype"]
+                    print(f"SelPoretype = {SelPoretype}", file=open("InteractiveInput.txt", 'a'))
+                else:
+                    SelPoretype = input(f" Does the protein have a solvent-filled channel region that should be automatically detected? ")
+                    print(f"SelPoretype = {SelPoretype}", file=open("InteractiveInput.txt", 'a'))
+                if SelPoretype.lower() in ["yes", "y"]:
                     poretype = 1
                     break
-                elif (SelPoretype == "NO") or (SelPoretype == "No") or (SelPoretype == "no") or (SelPoretype == "N") or (SelPoretype == "n"):
+                elif SelPoretype.lower() in ["no", "n"]:
                     poretype = 0
                     break
                 else:
                     print(" Sorry, I didn't understand your respond.")
             break
-        elif (memb == "NO") or (memb == "No") or (memb == "no") or (memb == "N") or (memb == "n"):
+        elif memb.lower() in ["no", "n"]:
             while True:
-                SelDelphi = input(f" Should a solution-phease Delphi-like calculation be performed? ")
+                if "SelDelphi" in InputDict:
+                    SelDelphi = InputDict["SelDelphi"]
+                    print(f"SelDelphi = {SelDelphi}", file=open("InteractiveInput.txt", 'a'))
+                else:
+                    SelDelphi = input(f" Should a solution-phease Delphi-like calculation be performed? ")
+                    print(f"SelDelphi = {SelDelphi}", file=open("InteractiveInput.txt", 'a'))
 
-                if (SelDelphi == "YES") or (SelDelphi == "Yes") or (SelDelphi == "yes") or (SelDelphi == "Y") or (SelDelphi == "y"):
+                if SelDelphi.lower() in ["yes", "y"]:
                     membraneopt = 0
                     poretype = 0
                     mthick = 40.0
@@ -176,10 +227,9 @@ def HemeHemeInt(ForceFieldDir, FFchoice, OutPrefix, SelRefRedoxState):
                     smoothopt = 2
                     maxitn = 100
                     nfocus = 1
-
                     break
 
-                elif (SelDelphi == "NO") or (SelDelphi == "No") or (SelDelphi == "n") or (SelDelphi == "N") or (SelDelphi == "n"):
+                elif SelDelphi.lower() in ["no", "n"]:
                     membraneopt = 0
                     poretype = 0
                     mthick = 40.0
@@ -194,7 +244,6 @@ def HemeHemeInt(ForceFieldDir, FFchoice, OutPrefix, SelRefRedoxState):
                     smoothopt = 1
                     maxitn = 100
                     nfocus = 2
-
                     break
 
                 else:
@@ -203,10 +252,10 @@ def HemeHemeInt(ForceFieldDir, FFchoice, OutPrefix, SelRefRedoxState):
         else:
             print(" Sorry, I didn't understand your response.")
 
-    if (os.path.isfile(f"pbsa_epsin{epsin}_epsout{epsout}.key") == True):
+    if os.path.isfile(f"pbsa_epsin{epsin}_epsout{epsout}.key"):
         print(f""" 
  Found pbsa_epsin{epsin}_epsout{epsout}.key to be used in PBSA calculation""")
-    elif (os.path.isfile(f"pbsa_epsin{epsin}_epsout{epsout}.key") == False):
+    else:
         print(f"""
  Single point PB calculation
  &cntrl
@@ -224,7 +273,7 @@ def HemeHemeInt(ForceFieldDir, FFchoice, OutPrefix, SelRefRedoxState):
   epsout={epsout},       ! Solvent region dielectric constant 
   epsmem={epsmem},       ! Membrane dielectric constant
   membraneopt={membraneopt},     ! Turn off/on implicit slab membrane
-  mthick={mthick}    ! Membrane thickness in Å
+  mthick={mthick},    ! Membrane thickness in Å
   mctrdz=0,          ! Membrane center in Z direction Å; 0 = centered at center of protein 
   poretype={poretype},        ! Turn off(0)/on(1) pore-searching algorithm
   radiopt=0,         ! Atomic radii from topology used; optimized radius (choice 1) for FE is missing 
@@ -234,7 +283,7 @@ def HemeHemeInt(ForceFieldDir, FFchoice, OutPrefix, SelRefRedoxState):
   sasopt=0,          ! Use solvent-excluded surface type for solute 
   triopt=1,          ! Use trimer arc dots to map analytical solvent excluded surface  
   arcres=0.25,       ! Resolution of dots (in Å) used to represent solvent-accessible arcs 
-  maxarcdot=15000    ! 
+  maxarcdot=15000,    ! 
   smoothopt={smoothopt},       ! Use weighted harmonic average of epsin and epsout for boundary grid edges across solute/solvent dielectric boundary 
   saopt=1,           ! Compute solute surface area 
   decompopt=2,       ! sigma decomposiiton scheme for non-polar solvation 
@@ -269,9 +318,14 @@ def HemeHemeInt(ForceFieldDir, FFchoice, OutPrefix, SelRefRedoxState):
         """, file=open(f"pbsa_epsin{epsin}_epsout{epsout}.key", 'w'))
 
     while True:
-        CompChoice = input(" Do you wish to run any needed computations in serial or parallel (s/p)? ")
+        if "CompChoice" in InputDict:
+            CompChoice = InputDict["CompChoice"]
+            print(f"CompChoice = {CompChoice}", file=open("InteractiveInput.txt", 'a'))
+        else:
+            CompChoice = input(" Do you wish to run any needed computations in serial or parallel (s/p)? ")
+            print(f"CompChoice = {CompChoice}", file=open("InteractiveInput.txt", 'a'))
 
-        if (CompChoice == "SERIAL") or (CompChoice == "Serial") or (CompChoice == "serial") or (CompChoice == "S") or (CompChoice == "s") or (CompChoice == "PARALLEL") or (CompChoice == "Parallel") or (CompChoice == "parallel") or (CompChoice == "P") or (CompChoice == "p"):
+        if CompChoice.lower() in ["serial", "s", "parallel", "p"]:
             break
         else:
             print(" Sorry, I didn't understand your choice. Please try again.")
@@ -280,24 +334,24 @@ def HemeHemeInt(ForceFieldDir, FFchoice, OutPrefix, SelRefRedoxState):
  ================================================
  Generating topologies for Redox Microstates
  ================================================""")
-    PairedChargeAssignment.PairedChargeAssignment(ForceFieldDir, FFchoice, SelRefRedoxState)
+    PairedChargeAssignment.PairedChargeAssignment(ForceFieldDir, FFchoice, SelRefRedoxState, InputDict)
 
     idx = 0
-    if (os.path.isfile("SelResIndexing.txt") == True):
+    if os.path.isfile("SelResIndexing.txt"):
         with open("SelResIndexing.txt") as fp:
             NumHEC = len(fp.readlines())
-            HEM = [0]*NumHEC
+            HEM = [0] * NumHEC
             fp.seek(0)
 
             Lines = fp.readlines()
             for line in Lines:
                 HEM[idx] = int(line.strip().split(" ")[-3])
-                idx+=1
+                idx += 1
         PairCount = list(itertools.combinations(HEM, r=2))
-    elif (os.path.isfile("SelResIndexing.txt") == False):
+    else:
         sys.exit("""
  SelResIndexing.txt is missing.
- We cannot proveed witihout this file.""")
+ We cannot proceed without this file.""")
 
     M = [[0 for column in range(len(HEM))] for row in range(len(HEM))]
     N = [[0 for column in range(4)] for row in range(4)]
@@ -338,7 +392,7 @@ def HemeHemeInt(ForceFieldDir, FFchoice, OutPrefix, SelRefRedoxState):
         j = HEM.index(Hj) 
 
         idxc = 0
-        command = ['']*(4)
+        command = [''] * 4
         print(f"""
  ================================================
  Analyzing pair Heme-{Hi} - Heme-{Hj}...
@@ -346,131 +400,123 @@ def HemeHemeInt(ForceFieldDir, FFchoice, OutPrefix, SelRefRedoxState):
 
         for k in ("o", "r"):
             for l in ("o", "r"):
-                if (os.path.isfile(f"{k}{Hi}-{l}{Hj}.prmtop") == False) or (os.path.isfile(f"{k}{Hi}-{l}{Hj}.prmtop") == False):
-                    if (os.path.isfile(f"GeneratePairIntTopologiesForHems{Hi}-{Hj}.in") == True):
+                if not os.path.isfile(f"{k}{Hi}-{l}{Hj}.prmtop") or not os.path.isfile(f"{k}{Hi}-{l}{Hj}.rst7"):
+                    if os.path.isfile(f"GeneratePairIntTopologiesForHems{Hi}-{Hj}.in"):
                         print(f"""
  Unable to find the prmtop and/or rst7 file for 
- tje {k}{Hi}-{l}{Hj} micro-redox state, but found
+ the {k}{Hi}-{l}{Hj} micro-redox state, but found
  GeneratePairIntTopologiesForHems{Hi}-{Hj}.in.
- We weill try to re-run TLEaP to generate the 
+ We will try to re-run TLEaP to generate the 
  needed files.""")
                         subprocess.run(f"tleap -s -f GeneratePairIntTopologiesForHems{Hi}-{Hj}.in > GeneratePairIntTopologiesForHems{Hi}-{Hj}.log", shell=True)
-                        if (os.path.isfile(f"{k}{Hi}-{l}{Hj}.prmtop") == False) or (os.path.isfile(f"{k}{Hi}-{l}{Hj}.prmtop") == False):
+                        if not os.path.isfile(f"{k}{Hi}-{l}{Hj}.prmtop") or not os.path.isfile(f"{k}{Hi}-{l}{Hj}.rst7"):
                             sys.exit(f"""
- TLEaP failed. please check 
+ TLEaP failed. Please check 
  GeneratePairIntTopologiesForHems{Hi}-{Hj}.log""")
-                    if (os.path.isfile(f"GeneratePairIntTopologiesForHems{Hi}-{Hj}.in") == False):
+                    else:
                         sys.exit("""
  Something went wrong in the 
  PairedChargeAssignment module""")
 
         for k in ("o", "r"):
             for l in ("o", "r"):
-                if (os.path.isfile(f"{k}{Hi}-{l}{Hj}.prmtop") == True):
-                    if (os.path.isfile(f"pbsa_{k}{Hi}-{l}{Hj}_epsin{epsin}_epsout{epsout}.out") == True):
+                if os.path.isfile(f"{k}{Hi}-{l}{Hj}.prmtop"):
+                    if os.path.isfile(f"pbsa_{k}{Hi}-{l}{Hj}_epsin{epsin}_epsout{epsout}.out"):
                         print(f""" 
  Found pbsa_{k}{Hi}-{l}{Hj}_epsin{epsin}_epsout{epsout}.out from a prior execution.
  This prior output will be used for the analysis.""")
-                    elif (os.path.isfile(f"pbsa_{k}{Hi}-{l}{Hj}_epsin{epsin}_epsout{epsout}.out") == False):
+                    else:
                         print(f""" 
  Did not find pbsa_{k}{Hi}-{l}{Hj}_epsin{epsin}_epsout{epsout}.out from a prior execution.
  The calculation will be submitted.""")
-                        if (CompChoice == "SERIAL") or (CompChoice == "Serial") or (CompChoice == "serial") or (CompChoice == "S") or (CompChoice == "s"):
+                        if CompChoice.lower() in ["serial", "s"]:
                             print(f" Running PBSA calculation for {k}{Hi}-{l}{Hj} with epsin {epsin} and epsout {epsout}...")
                             print(f"  pbsa -O -i pbsa_epsin{epsin}_epsout{epsout}.key -o pbsa_{k}{Hi}-{l}{Hj}_epsin{epsin}_epsout{epsout}.out -p {k}{Hi}-{l}{Hj}.prmtop -c {k}{Hi}-{l}{Hj}.rst7")
                             subprocess.run(f"pbsa -O -i pbsa_epsin{epsin}_epsout{epsout}.key -o pbsa_{k}{Hi}-{l}{Hj}_epsin{epsin}_epsout{epsout}.out -p {k}{Hi}-{l}{Hj}.prmtop -c {k}{Hi}-{l}{Hj}.rst7", shell=True)
-                        elif (CompChoice == "PARALLEL") or (CompChoice == "Parallel") or (CompChoice == "parallel") or (CompChoice == "P") or (CompChoice == "p"):
+                        elif CompChoice.lower() in ["parallel", "p"]:
                             command[idxc] = f"pbsa -O -i pbsa_epsin{epsin}_epsout{epsout}.key -o pbsa_{k}{Hi}-{l}{Hj}_epsin{epsin}_epsout{epsout}.out -p {k}{Hi}-{l}{Hj}.prmtop -c {k}{Hi}-{l}{Hj}.rst7"
                             idxc += 1
-            
-        if (idxc != 0):
+
+        if idxc != 0:
             commandrev = list(filter(None, command))
-            print("\n Submitting "+str(len(commandrev))+" PBSA calculations in parallel")
-            print(*commandrev,sep='\n')
-            procs = [ subprocess.Popen(i, shell=True) for i in commandrev ]
+            print("\n Submitting " + str(len(commandrev)) + " PBSA calculations in parallel")
+            print(*commandrev, sep='\n')
+            procs = [subprocess.Popen(i, shell=True) for i in commandrev]
 
             for p in procs:
                 p.wait()
-                print("  Finished: "+str(p))
+                print("  Finished: " + str(p))
 
         chk = 4
-        if (os.path.isfile(f"pbsa_o{Hi}-o{Hj}_epsin{epsin}_epsout{epsout}.out") == False):
+        if not os.path.isfile(f"pbsa_o{Hi}-o{Hj}_epsin{epsin}_epsout{epsout}.out"):
             chk -= 1
-            print(f" Something went wrong! pbsa_o{Hi}-o{Hj}_epsin{epsin}_epsout{epsout}.out is missing.""")
-        if (os.path.isfile(f"pbsa_o{Hi}-r{Hj}_epsin{epsin}_epsout{epsout}.out") == False):
+            print(f" Something went wrong! pbsa_o{Hi}-o{Hj}_epsin{epsin}_epsout{epsout}.out is missing.")
+        if not os.path.isfile(f"pbsa_o{Hi}-r{Hj}_epsin{epsin}_epsout{epsout}.out"):
             chk -= 1
-            print(f" Something went wrong! pbsa_o{Hi}-r{Hj}_epsin{epsin}_epsout{epsout}.out is missing.""")
-        if (os.path.isfile(f"pbsa_r{Hi}-o{Hj}_epsin{epsin}_epsout{epsout}.out") == False):
+            print(f" Something went wrong! pbsa_o{Hi}-r{Hj}_epsin{epsin}_epsout{epsout}.out is missing.")
+        if not os.path.isfile(f"pbsa_r{Hi}-o{Hj}_epsin{epsin}_epsout{epsout}.out"):
             chk -= 1
-            print(f" Something went wrong! pbsa_r{Hi}-o{Hj}_epsin{epsin}_epsout{epsout}.out is missing.""")
-        if (os.path.isfile(f"pbsa_r{Hi}-r{Hj}_epsin{epsin}_epsout{epsout}.out") == False):
+            print(f" Something went wrong! pbsa_r{Hi}-o{Hj}_epsin{epsin}_epsout{epsout}.out is missing.")
+        if not os.path.isfile(f"pbsa_r{Hi}-r{Hj}_epsin{epsin}_epsout{epsout}.out"):
             chk -= 1
-            print(f" Something went wrong! pbsa_r{Hi}-r{Hj}_epsin{epsin}_epsout{epsout}.out is missing.""")
+            print(f" Something went wrong! pbsa_r{Hi}-r{Hj}_epsin{epsin}_epsout{epsout}.out is missing.")
 
-        if (chk == 4):
-            #print(" All four files found") 
-                     
+        if chk == 4:
+            # print(" All four files found") 
+
             for k in ("o", "r"):
                 for l in ("o", "r"):
-
-                    if (k == "o") and (l == "o"):
+                    if k == "o" and l == "o":
                         idx = 0
                         with open(f"pbsa_{k}{Hi}-{l}{Hj}_epsin{epsin}_epsout{epsout}.out", 'r', encoding="latin-1") as fp:
                             lines = fp.readlines()
                             for line in lines:
-                                word1 = 'Etot'
-
-                                if (line.find(word1) != -1) and (idx == 0):
-                                    N[0][0] = float(line.strip().split()[2]) * 0.043 
+                                if 'Etot' in line and idx == 0:
+                                    N[0][0] = float(line.strip().split()[2]) * 0.043
                                     print(k, i, l, j, round(N[0][0], 3), file=open('StateEnergies.txt', 'a'))
                                     idx += 1
 
-                    if (k == "o") and (l == "r"):
+                    if k == "o" and l == "r":
                         idx = 0
                         with open(f"pbsa_{k}{Hi}-{l}{Hj}_epsin{epsin}_epsout{epsout}.out", 'r', encoding="latin-1") as fp:
                             lines = fp.readlines()
                             for line in lines:
-                                word1 = 'Etot'
-
-                                if (line.find(word1) != -1) and (idx == 0):
-                                    N[0][1] = float(line.strip().split()[2]) * 0.043 
+                                if 'Etot' in line and idx == 0:
+                                    N[0][1] = float(line.strip().split()[2]) * 0.043
                                     print(k, i, l, j, round(N[0][1], 3), file=open('StateEnergies.txt', 'a'))
                                     idx += 1
 
-                    if (k == "r") and (l == "o"):
+                    if k == "r" and l == "o":
                         idx = 0
                         with open(f"pbsa_{k}{Hi}-{l}{Hj}_epsin{epsin}_epsout{epsout}.out", 'r', encoding="latin-1") as fp:
                             lines = fp.readlines()
                             for line in lines:
-                                word1 = 'Etot'
-
-                                if (line.find(word1) != -1) and (idx == 0):
-                                    N[1][0] = float(line.strip().split()[2]) * 0.043 
+                                if 'Etot' in line and idx == 0:
+                                    N[1][0] = float(line.strip().split()[2]) * 0.043
                                     print(k, i, l, j, round(N[1][0], 3), file=open('StateEnergies.txt', 'a'))
                                     idx += 1
-                                    
-                    if (k == "r") and (l == "r"):
+
+                    if k == "r" and l == "r":
                         idx = 0
                         with open(f"pbsa_{k}{Hi}-{l}{Hj}_epsin{epsin}_epsout{epsout}.out", 'r', encoding="latin-1") as fp:
                             lines = fp.readlines()
                             for line in lines:
-                                word1 = 'Etot'
-
-                                if (line.find(word1) != -1) and (idx == 0):
-                                    N[1][1] = float(line.strip().split()[2]) * 0.043 
+                                if 'Etot' in line and idx == 0:
+                                    N[1][1] = float(line.strip().split()[2]) * 0.043
                                     print(k, i, l, j, round(N[1][1], 3), file=open('StateEnergies.txt', 'a'))
                                     idx += 1
 
-        M[i][i] = round(((N[0][1] - N[1][1]))*1000, 3)
-        M[i][j] = round(((N[0][0] - N[1][0]) - (N[0][1] - N[1][1]))*1000, 3)
-        M[j][i] = round(((N[0][0] - N[0][1]) - (N[1][0] - N[1][1]))*1000, 3)
-        M[j][j] = round(((N[1][0] - N[1][1]))*1000, 3)
+        M[i][i] = round(((N[0][1] - N[1][1])) * 1000, 3)
+        M[i][j] = round(((N[0][0] - N[1][0]) - (N[0][1] - N[1][1])) * 1000, 3)
+        M[j][i] = round(((N[0][0] - N[0][1]) - (N[1][0] - N[1][1])) * 1000, 3)
+        M[j][j] = round(((N[1][0] - N[1][1])) * 1000, 3)
+
     print("""
  Matrix of State Energies:
     Diagonal terms = oxidation energies
     Off-diagonal terms = interaction energies
 
-    Energies in the matirx are in meV and relative to the 
+    Energies in the matrix are in meV and relative to the 
     fully reduced system. Positive interaction energies 
     indicate how much the oxidation of one heme is 
     disfavored by the oxidation of the adjacent heme.\n """)
@@ -478,7 +524,7 @@ def HemeHemeInt(ForceFieldDir, FFchoice, OutPrefix, SelRefRedoxState):
     print(*M, sep='\n')
 
     print("""
- This data and the individual state energies on whcih 
+ This data and the individual state energies on which 
  it is based is saved to StateEnergies.txt.""")
 
     print("\n", *M, sep='\n', file=open('StateEnergies.txt', 'a'))

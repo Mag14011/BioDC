@@ -7,7 +7,7 @@ import subprocess
 from subprocess import Popen
 ################################################################################################################################################
 
-def PairedChargeAssignment(ForceFieldDir, FFchoice, SelRefRedoxState):
+def PairedChargeAssignment(ForceFieldDir, FFchoice, SelRefRedoxState, InputDict):
 
 #------------------------------------------------------------------------------
 # Count how many of each type of heme are present.
@@ -175,7 +175,7 @@ proceeding.""")
 
 #------------------------------------------------------------------------------
 # For the selected heme pair, cycle through all the possible redox microstates
-# while all other hemes are left in the reference redox state, whcih was 
+# while all other hemes are left in the reference redox state, which was 
 # specified in DefineRefState.py
 #------------------------------------------------------------------------------
         for k in ("o", "r"):
@@ -308,7 +308,7 @@ proceeding.""")
  #Oxidized Heme-{Hi}: His-Met ligated b-type heme    
 
  #Define atom groups
-   set HISp  [atomselect top "resname FMO RMO and resid {Ligp[0]}"]
+   set HISp  [atomselect top "resname FMO FMR and resid {Ligp[0]}"]
    set METd  [atomselect top "resname RMO RMR and resid {Ligd[0]}"]
    set HEM   [atomselect top "resname MBO MBR and resid {Hi}"]
 
@@ -326,17 +326,17 @@ proceeding.""")
  #Reduced Heme-{Hi}: His-Met ligated b-type heme    
 
  #Define atom groups
-   set HISp  [atomselect top "resname FMO RMO and resid {Ligp[0]}"]
+   set HISp  [atomselect top "resname FMO FMR and resid {Ligp[0]}"]
    set METd  [atomselect top "resname RMO RMR and resid {Ligd[0]}"]
    set HEM   [atomselect top "resname MBO MBR and resid {Hi}"]
 
- #Change residue names for oxidized state:
+ #Change residue names for reduced state:
    #The proximal His residue 
-     $HISp set resname FMR; #Proximal His for oxidized His-Met ligated b-type heme.
+     $HISp set resname FMR; #Proximal His for reduced His-Met ligated b-type heme.
    #The distal His residue 
-     $METd set resname RMR; #Distal   Met for oxidized His-Met ligated b-type heme.
+     $METd set resname RMR; #Distal   Met for reduced His-Met ligated b-type heme.
    #The heme group
-     $HEM  set resname MBR; #b-type His-Met ligated oxidized heme""", file=open(VMDinput, 'a'))
+     $HEM  set resname MBR; #b-type His-Met ligated reduced heme""", file=open(VMDinput, 'a'))
 
                 if (l == "o") and (HjType == "c") and (HjAxLigType == "HH"):
                     print(f"""
@@ -366,11 +366,11 @@ proceeding.""")
 
  #Change residue names for reduced state:
    #The proximal His residue 
-     $HISp  set resname PHR; #Proximal His for reduced  His-His ligated heme.
+     $HISp  set resname PHR; #Proximal His for reduced His-His ligated heme.
    #The distal His residue
-     $HISd  set resname DHR; #Distal   His for reduced  His-His ligated heme.
+     $HISd  set resname DHR; #Distal   His for reduced His-His ligated heme.
    #The heme group including the thioether linkages from Cys sidechains
-     $HEM   set resname HCR; #c-type His-His ligated reduced  heme""", file=open(VMDinput, 'a'))
+     $HEM   set resname HCR; #c-type His-His ligated reduced heme""", file=open(VMDinput, 'a'))
       
                 if (l == "o") and (HjType == "c") and (HjAxLigType == "HM"):
                     print(f"""
@@ -398,13 +398,13 @@ proceeding.""")
    set METd  [atomselect top "resname DMO DMR and resid {Ligd[1]}"]
    set HEM   [atomselect top "resname MCO MCR and resid {Hj}"]
 
- #Change residue names for oxidized state:
+ #Change residue names for reduced state:
    #The proximal His residue 
-     $HISp  set resname PMR; #Proximal His for oxidized His-Met ligated heme.
+     $HISp  set resname PMR; #Proximal His for reduced His-Met ligated heme.
    #The distal His residue
-     $METd  set resname DMR; #Distal   Met for oxidized His-Met ligated heme.
+     $METd  set resname DMR; #Distal   Met for reduced His-Met ligated heme.
    #The heme group including the thioether linkages from Cys sidechains
-     $HEM   set resname MCR; #c-type His-Met ligated oxidized heme""", file=open(VMDinput, 'a'))
+     $HEM   set resname MCR; #c-type His-Met ligated reduced heme""", file=open(VMDinput, 'a'))
 
                 if (l == "o") and (HjType == "b") and (HjAxLigType == "HH"):
                     print(f"""
@@ -432,20 +432,20 @@ proceeding.""")
    set HISd  [atomselect top "resname RHO RHR and resid {Ligd[1]}"]
    set HEM   [atomselect top "resname HBO HBR and resid {Hj}"]
 
- #Change residue names for oxidized state:
+ #Change residue names for reduced state:
    #The proximal His residue 
-     $HISp set resname FHR; #Proximal His for oxidized His-His ligated b-type heme.
+     $HISp set resname FHR; #Proximal His for reduced His-His ligated b-type heme.
    #The distal His residue 
-     $HISd set resname RHR; #Distal   HIS for oxidized His-His ligated b-type heme.
+     $HISd set resname RHR; #Distal   HIS for reduced His-His ligated b-type heme.
    #The heme group
-     $HEM  set resname HBR; #b-type His-His ligated oxidized heme""", file=open(VMDinput, 'a'))
+     $HEM  set resname HBR; #b-type His-His ligated reduced heme""", file=open(VMDinput, 'a'))
     
                 if (l == "o") and (HjType == "b") and (HjAxLigType == "HM"):
                     print(f"""
  #Oxidized Heme-{Hj}: His-Met ligated b-type heme      
 
  #Define atom groups
-   set HISp  [atomselect top "resname FMO RMO and resid {Ligp[1]}"]
+   set HISp  [atomselect top "resname FMO FMR and resid {Ligp[1]}"]
    set METd  [atomselect top "resname RMO RMR and resid {Ligd[1]}"]
    set HEM   [atomselect top "resname MBO MBR and resid {Hj}"]
 
@@ -459,20 +459,21 @@ proceeding.""")
 
                 if (l == "r") and (HjType == "b") and (HjAxLigType == "HM"):
                     print(f"""
+ #-------------------------------------------------------------------------
  #Reduced Heme-{Hj}: His-Met ligated b-type heme       
 
  #Define atom groups
-   set HISp  [atomselect top "resname FMO RMO and resid {Ligp[1]}"]
+   set HISp  [atomselect top "resname FMO FMR and resid {Ligp[1]}"]
    set METd  [atomselect top "resname RMO RMR and resid {Ligd[1]}"]
    set HEM   [atomselect top "resname MBO MBR and resid {Hj}"]
 
- #Change residue names for oxidized state:
+ #Change residue names for reduced state:
    #The proximal His residue 
-     $HISp set resname FMR; #Proximal His for oxidized His-Met ligated b-type heme.
+     $HISp set resname FMR; #Proximal His for reduced His-Met ligated b-type heme.
    #The distal His residue 
-     $METd set resname RMR; #Distal   Met for oxidized His-Met ligated b-type heme.
+     $METd set resname RMR; #Distal   Met for reduced His-Met ligated b-type heme.
    #The heme group
-     $HEM  set resname MBR; #b-type His-Met ligated oxidized heme""", file=open(VMDinput, 'a'))
+     $HEM  set resname MBR; #b-type His-Met ligated reduced heme""", file=open(VMDinput, 'a'))
 
                 print(f"""
  set sel [atomselect top "all and not resname WAT 'Na+' 'Cl-'"]
@@ -508,7 +509,7 @@ proceeding.""")
 # atom types and forcefield files if one or more hemes in the structure is 
 # of that type, but not to specify multiple types those entires.
 #------------------------------------------------------------------------------
-        if (HiType == "c" and HiAxLigType == "HH") or (HjType == "c" and HjAxLigType == "HH"):
+        if (HiType == "c" and HiAxLigType == "HH") or (HjType == "c" and HiAxLigType == "HH"):
             print("""
         { "M7"  "Fe" "sp3" } #M7&S1-S6:
         { "S1"  "N" "sp3" }  #Oxidized
@@ -525,7 +526,7 @@ proceeding.""")
         { "T5"  "N" "sp3" }
         { "T6"  "N" "sp3" }""", end=" ", file=open(TLEaPinput, 'a'))
 
-        if (HiType == "c" and HiAxLigType == "HM") or (HjType == "c" and HjAxLigType == "HM"):
+        if (HiType == "c" and HiAxLigType == "HM") or (HjType == "c" and HiAxLigType == "HM"):
             print("""
         { "M5"  "Fe" "sp3" } #M5&U1-U6:
         { "U1"  "N" "sp3" }  #Oxidized
@@ -542,7 +543,7 @@ proceeding.""")
         { "V5"  "N" "sp3" }
         { "V6"  "N" "sp3" }""", end=" ", file=open(TLEaPinput, 'a'))
 
-        if (HiType == "b" and HiAxLigType == "HH") or (HjType == "b" and HjAxLigType == "HH"):
+        if (HiType == "b" and HiAxLigType == "HH") or (HjType == "b" and HiAxLigType == "HH"):
             print("""
         { "M1"  "Fe" "sp3" } #M1&Y1-Y6:
         { "Y1"  "N" "sp3" }  #Oxidized
@@ -559,7 +560,7 @@ proceeding.""")
         { "Z5"  "N" "sp3" }
         { "Z6"  "N" "sp3" }""", end=" ", file=open(TLEaPinput, 'a'))
 
-        if (HiType == "b" and HiAxLigType == "HM") or (HjType == "b" and HjAxLigType == "HM"):
+        if (HiType == "b" and HiAxLigType == "HM") or (HjType == "b" and HiAxLigType == "HM"):
             print("""
         { "M3"  "Fe" "sp3" } #M3&W1-W6:
         { "W1"  "N" "sp3" }  #Oxidized
@@ -672,17 +673,18 @@ proceeding.""")
 #    His-Met ligation.
 #
 #    Alternative set of charges are available at:
-#      L.Noodleman et al. Inorg. Chem., 53 (2014) 6458;
+#      L.Noodleman et al. Inorg. Chem., 53 (2014)
+#      6458;
 #      J.A.Fee et al. J.Am.Chem.Soc., 130 (2008) 15002. 
 """, end=" ", file=open(TLEaPinput, 'a'))
 
-        if (HiType == "b" and HiAxLigType == "HH") or (HjType == "b" and HjAxLigType == "HH"):
+        if (HiType == "b" and HiAxLigType == "HH") or (HjType == "b" and HiAxLigType == "HH"):
             print(f"""
  loadamberparams {ForceFieldDir}/Oxidized_HisHisLigated_b-heme.frcmod
  loadoff {ForceFieldDir}/Oxidized_HisHisLigated_b-heme_RESP.lib
  loadamberparams {ForceFieldDir}/Reduced_HisHisLigated_b-heme.frcmod
  loadoff {ForceFieldDir}/Reduced_HisHisLigated_b-heme_RESP.lib""", file=open(TLEaPinput, 'a'))
-        if (HiType == "b" and HiAxLigType == "HM") or (HjType == "b" and HjAxLigType == "HM"):
+        if (HiType == "b" and HiAxLigType == "HM") or (HjType == "b" and HiAxLigType == "HM"):
             print(f"""
  loadamberparams {ForceFieldDir}/Oxidized_HisMetLigated_b-heme.frcmod
  loadoff {ForceFieldDir}/Oxidized_HisMetLigated_b-heme_RESP.lib
@@ -728,20 +730,20 @@ proceeding.""")
 #      Simulations. J. Phys. Chem. B 2013, 117 (1), 70–82.
 """, end=" ", file=open(TLEaPinput, 'a'))
 
-        if (HiType == "c" and HiAxLigType == "HH") or (HjType == "c" and HjAxLigType == "HH"):
-            if (FFchoice == "HENRIQUES") or (FFchoice == "Henriques") or (FFchoice == "henriques") or (FFchoice == "H") or (FFchoice == "h"):
+        if (HiType == "c" and HiAxLigType == "HH") or (HjType == "c" and HiAxLigType == "HH"):
+            if (FFchoice.lower() in ["henriques", "h"]):
                 print(f"""
  loadamberparams {ForceFieldDir}/Oxidized_HisHisLigated_c-heme.frcmod
  loadoff {ForceFieldDir}/Henriques_Oxidized_HisHisLigated_c-heme_RESP.lib
  loadamberparams {ForceFieldDir}/Reduced_HisHisLigated_c-heme.frcmod
  loadoff {ForceFieldDir}/Henriques_Reduced_HisHisLigated_c-heme_RESP.lib""", file=open(TLEaPinput, 'a'))
-            elif (FFchoice == "GUBERMAN-PFEFFER") or (FFchoice == "Guberman-Pfeffer") or (FFchoice == "guberman-pfeffer") or (FFchoice == "GP") or (FFchoice == "gp") or (FFchoice == "Gp") or (FFchoice == "gP"):
+            elif (FFchoice.lower() in ["guberman-pfeffer", "gp"]):
                 print(f"""
  loadamberparams {ForceFieldDir}/Oxidized_HisHisLigated_c-heme.frcmod
  loadoff {ForceFieldDir}/Oxidized_HisHisLigated_c-heme_RESP.lib
  loadamberparams {ForceFieldDir}/Reduced_HisHisLigated_c-heme.frcmod
  loadoff {ForceFieldDir}/Reduced_HisHisLigated_c-heme_RESP.lib""", file=open(TLEaPinput, 'a'))
-        if (HiType == "c" and HiAxLigType == "HM") or (HjType == "c" and HjAxLigType == "HM"):
+        if (HiType == "c" and HiAxLigType == "HM") or (HjType == "c" and HiAxLigType == "HM"):
             print(f"""
  loadamberparams {ForceFieldDir}/Oxidized_HisMetLigated_c-heme.frcmod
  loadoff {ForceFieldDir}/Oxidized_HisMetLigated_c-heme_RESP.lib
@@ -754,24 +756,24 @@ proceeding.""")
  loadoff {ForceFieldDir}/Oxidized_HisMetLigated_c-heme_RESP.lib""", end=" ", file=open(TLEaPinput, 'a'))
         if (SelRefRedoxState == "R" and Count_c_HM != 0 and SelHemIType != "cHM") or (SelRefRedoxState == "R" and Count_c_HM != 0 and SelHemJType != "cHM"):
             print(f"""
-loadamberparams {ForceFieldDir}/Reduced_HisMetLigated_c-heme.frcmod
+ loadamberparams {ForceFieldDir}/Reduced_HisMetLigated_c-heme.frcmod
  loadoff {ForceFieldDir}/Reduced_HisMetLigated_c-heme_RESP.lib""", end=" ", file=open(TLEaPinput, 'a'))
 
         if (SelRefRedoxState == "O" and Count_c_HH != 0 and SelHemIType != "cHH") or (SelRefRedoxState == "O" and Count_c_HH != 0 and SelHemJType != "cHH"):
-            if (FFchoice == "HENRIQUES") or (FFchoice == "Henriques") or (FFchoice == "henriques") or (FFchoice == "H") or (FFchoice == "h"):
+            if (FFchoice.lower() in ["henriques", "h"]):
                 print(f"""
  loadamberparams {ForceFieldDir}/Oxidized_HisHisLigated_c-heme.frcmod
  loadoff {ForceFieldDir}/Henriques_Oxidized_HisHisLigated_c-heme_RESP.lib""", end=" ", file=open(TLEaPinput, 'a'))
-            elif (FFchoice == "GUBERMAN-PFEFFER") or (FFchoice == "Guberman-Pfeffer") or (FFchoice == "guberman-pfeffer") or (FFchoice == "GP") or (FFchoice == "gp") or (FFchoice == "Gp") or (FFchoice == "gP"):
+            elif (FFchoice.lower() in ["guberman-pfeffer", "gp"]):
                 print(f"""
  loadamberparams {ForceFieldDir}/Oxidized_HisHisLigated_c-heme.frcmod
  loadoff {ForceFieldDir}/Oxidized_HisHisLigated_c-heme_RESP.lib""", end=" ", file=open(TLEaPinput, 'a'))
         if (SelRefRedoxState == "R" and Count_c_HH != 0 and SelHemIType != "cHH") or (SelRefRedoxState == "R" and Count_c_HH != 0 and SelHemJType != "cHH"):
-            if (FFchoice == "HENRIQUES") or (FFchoice == "Henriques") or (FFchoice == "henriques") or (FFchoice == "H") or (FFchoice == "h"):
+            if (FFchoice.lower() in ["henriques", "h"]):
                 print(f"""
  loadamberparams {ForceFieldDir}/Reduced_HisHisLigated_c-heme.frcmod
  loadoff {ForceFieldDir}/Henriques_Reduced_HisHisLigated_c-heme_RESP.lib""", end=" ", file=open(TLEaPinput, 'a'))
-            elif (FFchoice == "GUBERMAN-PFEFFER") or (FFchoice == "Guberman-Pfeffer") or (FFchoice == "guberman-pfeffer") or (FFchoice == "GP") or (FFchoice == "gp") or (FFchoice == "Gp") or (FFchoice == "gP"):
+            elif (FFchoice.lower() in ["guberman-pfeffer", "gp"]):
                 print(f"""
  loadamberparams {ForceFieldDir}/Reduced_HisHisLigated_c-heme.frcmod
  loadoff {ForceFieldDir}/Reduced_HisHisLigated_c-heme_RESP.lib""", end=" ", file=open(TLEaPinput, 'a'))
@@ -785,7 +787,7 @@ loadamberparams {ForceFieldDir}/Reduced_HisMetLigated_c-heme.frcmod
 
 #------------------------------------------------------------------------------
 # Specify the disulfide linkages. The residue IDs for each pair are read from 
-# DisulfideDefinitions.txt, whcih was created by SelectDisulfides.py 
+# DisulfideDefinitions.txt, which was created by SelectDisulfides.py 
 #------------------------------------------------------------------------------
         if (os.path.isfile("DisulfideDefinitions.txt") == True):
             with open("DisulfideDefinitions.txt") as dsl:
@@ -803,11 +805,13 @@ loadamberparams {ForceFieldDir}/Reduced_HisMetLigated_c-heme.frcmod
             if (len(DisulfPairID) != 0):
                 print("# Define Disulfide linkages ")
                 for sbi in range(len(DisulfPairID)):
-                    print(f" bond  ox.{DisulfPairID[sbi][0]}.SG ox.{DisulfPairID[sbi][1]}.SG", file=open(TLEaPinput, 'a'))
-                    print(f" bond red.{DisulfPairID[sbi][0]}.SG red.{DisulfPairID[sbi][1]}.SG", file=open(TLEaPinput, 'a'))
+                    print(f" bond  oo.{DisulfPairID[sbi][0]}.SG oo.{DisulfPairID[sbi][1]}.SG", file=open(TLEaPinput, 'a'))
+                    print(f" bond  or.{DisulfPairID[sbi][0]}.SG or.{DisulfPairID[sbi][1]}.SG", file=open(TLEaPinput, 'a'))
+                    print(f" bond  ro.{DisulfPairID[sbi][0]}.SG ro.{DisulfPairID[sbi][1]}.SG", file=open(TLEaPinput, 'a'))
+                    print(f" bond  rr.{DisulfPairID[sbi][0]}.SG rr.{DisulfPairID[sbi][1]}.SG", file=open(TLEaPinput, 'a'))
 
 #------------------------------------------------------------------------------
-# Regardless of which hemes constitue the selected pair, bond definitions 
+# Regardless of which hemes constitute the selected pair, bond definitions 
 # need to be provided for each heme in the structure. Thus, we read in 
 # ResIndexing.txt now instead of SelResIndexing.txt. The bond definitions are
 # quadrupled because each heme is present in the structure for the four 
@@ -865,7 +869,7 @@ loadamberparams {ForceFieldDir}/Reduced_HisMetLigated_c-heme.frcmod
                     print(f""" bond  rr.{Ligd}.SD   rr.{HEM}.FE""", file=open(TLEaPinput, 'a'))
   
                 print(f"""
-#Bond axially coordinated residues to preceeding and proceeding residues
+#Bond axially coordinated residues to preceding and proceeding residues
  bond  oo.{Ligp-1}.C   oo.{Ligp}.N
  bond  oo.{Ligp}.C   oo.{Ligp+1}.N
  bond  oo.{Ligd-1}.C   oo.{Ligd}.N
@@ -929,7 +933,6 @@ loadamberparams {ForceFieldDir}/Reduced_HisMetLigated_c-heme.frcmod
 
 quit""", file=open(TLEaPinput, 'a'))
 
-#       if (os.path.isfile(f"GeneratePairIntTopologiesForHems{Hi}-{Hj}.in") == False):
         print(f"""
  Using TLEaP to build the redox microstate topologies for Heme-{Hi} and Heme-{Hj}... """)
         subprocess.run(f"tleap -s -f GeneratePairIntTopologiesForHems{Hi}-{Hj}.in > GeneratePairIntTopologiesForHems{Hi}-{Hj}.log", shell=True)
@@ -942,19 +945,12 @@ quit""", file=open(TLEaPinput, 'a'))
                 if (os.path.isfile(f"{k}{Hi}-{l}{Hj}.prmtop") == False) or (os.path.isfile(f"{k}{Hi}-{l}{Hj}.rst7") == False):
                     chk+=1
                     print(f"""
-   √ {k}{Hi} -- {l}{Hj}: TLEaP failed. 
+   X {k}{Hi} -- {l}{Hj}: TLEaP failed. 
    Please check GeneratePairIntTopologiesForHems{Hi}-{Hj}.log""")
     
         if (chk != 0):
-            pass
             sys.exit(f"""
  TLEaP failed to build the topologies for one or more redox microstates. 
  Please inspect PairInt_{Hi}-{Hj}.log and GeneratePairIntTopologiesForHems{Hi}-{Hj}.log 
- before re-running tis module \n""")
-    
-################################################################################################################################################
-#ForceFieldDir="/home/mjgp/BioDCv2/ForceFieldLib"
-#FFchoice=''
-#SelRefRedoxState="r"
-#PairedChargeAssignment(ForceFieldDir, FFchoice, SelRefRedoxState) 
-
+ before re-running this module \n""")
+            

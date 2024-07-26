@@ -185,7 +185,7 @@ def GenerateRedoxStateTopologies(ForceFieldDir, FFchoice, SelRefRedoxState):
 
  exit""", file=open(f"SetRedoxStatesForHem{HEM}.tcl", 'w')) 
 
-            elif ( EntryLength == 6 ) and ( HemeType == "b") and ( AxLigType == "HM" ):
+            elif (EntryLength == 6) and (HemeType == "b") and (AxLigType == "HM"):
                 SelHemIDType = "bHM"
                 HISp = int(line.strip().split(" ")[0])
                 METd = int(line.strip().split(" ")[1])
@@ -232,7 +232,9 @@ def GenerateRedoxStateTopologies(ForceFieldDir, FFchoice, SelRefRedoxState):
  #Write PDBs for reduced state
    set sel [atomselect top "all and not resname WAT 'Na+' 'Cl-'"]
    $sel writepdb r{HEM}.pdb
- #-------------------------------------------------------------------------""", file=open(f"SetRedoxStatesForHem{HEM}.tcl", 'w')) 
+ #-------------------------------------------------------------------------
+
+ exit""", file=open(f"SetRedoxStatesForHem{HEM}.tcl", 'w')) 
 
             print(f"   Running VMD to generate o{HEM}.pdb and r{HEM}.pdb ...")
             subprocess.run(f"vmd -dispdev text -e SetRedoxStatesForHem{HEM}.tcl > SetRedoxStatesForHem{HEM}.log", shell=True)
@@ -256,7 +258,6 @@ def GenerateRedoxStateTopologies(ForceFieldDir, FFchoice, SelRefRedoxState):
  VMD failed to generated r{HEM}.pdb. 
  Please check SetRedoxStatesForHem{HEM}.log 
  to diagnose the problem. \n""")
-#+#+#+#+#+#+X+#+#+#+#+#+#+#+#+#+#+#+#+#+#+#+#+#+#+#+#+#+#+#+#+#+#+#+#+#+#+#+#+#+#+#+#+#+#+#+#+#+#+#+#+#+#+#+#+#+#+#+#+#+#+#+#+#+#+#+#+#+#+#+#+#+
 
             Count_c_HH = 0  
             Count_c_HM = 0  
@@ -335,7 +336,7 @@ def GenerateRedoxStateTopologies(ForceFieldDir, FFchoice, SelRefRedoxState):
         { "X6"  "N" "sp3" }""", end=" ", file=open(TLEaPinput, 'a'))
 
             if (SelHemIDType == "cHM"):
-                print("""
+                 print("""
         { "M5"  "Fe" "sp3" } #M5&U1-U6:
         { "U1"  "N" "sp3" }  #Oxidized
         { "U2"  "S" "sp3" }  #His-Met
@@ -674,9 +675,8 @@ quit""", file=open(TLEaPinput, 'a'))
             subprocess.run(f"tleap -s -f {TLEaPinput} > GenerateRedoxStateTopologiesForHem{SelHEM[idxs]}.log", shell=True)
 
             if (os.path.isfile(f"o{SelHEM[idxs]}.prmtop") == True) and (os.path.isfile(f"o{SelHEM[idxs]}.rst7") == True):
-                print(f"     TLEaP successfully generated o{SelHEM[idxs]}.prmtop and o{SelHEM[idxs]}.rst7")
+               print(f"    TLEaP successfully generated o{SelHEM[idxs]}.prmtop and o{SelHEM[idxs]}.rst7")
             elif (os.path.isfile(f"o{SelHEM[idxs]}.prmtop") == False) or (os.path.isfile(f"o{SelHEM[idxs]}.rst7") == False):
-                pass
                 sys.exit(f"""     
  TLEaP failed to generated o{SelHEM[idxs]}.prmtop and/or o{SelHEM[idxs]}.rst7
  Please check GenerateRedoxStateTopologiesForHem{SelHEM[idxs]}.log 
@@ -685,7 +685,6 @@ quit""", file=open(TLEaPinput, 'a'))
             if (os.path.isfile(f"r{SelHEM[idxs]}.prmtop") == True) and (os.path.isfile(f"r{SelHEM[idxs]}.rst7") == True):
                 print(f"     TLEaP successfully generated r{SelHEM[idxs]}.prmtop and r{SelHEM[idxs]}.rst7")
             elif (os.path.isfile(f"r{SelHEM[idxs]}.prmtop") == False) or (os.path.isfile(f"r{SelHEM[idxs]}.rst7") == False):
-                pass
                 sys.exit(f"""     
  TLEaP failed to generated r{SelHEM[idxs]}.prmtop and/or r{SelHEM[idxs]}.rst7
  Please check GenerateRedoxStateTopologiesForHem{SelHEM[idxs]}.log 
