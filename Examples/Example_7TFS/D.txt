@@ -1,1 +1,0 @@
-Diffusion constant = 4.405180E-08 cm^2/S

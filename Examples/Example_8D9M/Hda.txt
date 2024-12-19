@@ -1,7 +1,0 @@
-Hda(HEH-562 <-> HEH-559) ang. =    102.634 deg.; Hda =  2.000 meV
-Hda(HEH-559 <-> HEH-553) ang. =      8.823 deg.; Hda =  8.000 meV
-Hda(HEH-553 <-> HEH-550) ang. =     26.936 deg.; Hda =  8.000 meV
-Hda(HEH-550 <-> HEH-547) ang. =    104.264 deg.; Hda =  2.000 meV
-Hda(HEH-547 <-> HEH-544) ang. =     11.072 deg.; Hda =  8.000 meV
-Hda(HEH-544 <-> HEH-541) ang. =    118.832 deg.; Hda =  2.000 meV
-Hda(HEH-541 <-> HEH-844) ang. =     22.662 deg.; Hda =  8.000 meV
