@@ -1,10 +1,12 @@
 import os
+import sys
 import math
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.patheffects import withStroke
 from matplotlib.colors import LinearSegmentedColormap, to_rgba
 from tabulate import tabulate
+from argparse import ArgumentParser
 
 # Constants
 R = 8.314  # J/(mol*K)
@@ -19,15 +21,38 @@ def ensure_output_dir(directory):
     return output_dir
 
 def read_energy_matrix(filename, energy_shift=0, interaction_scale=1.0):
+    """Read and adjust the energy matrix from a file.
+    
+    Parameters
+    ----------
+    filename : str
+        Path to the energy matrix file
+    energy_shift : float
+        Shift to apply to diagonal elements (site energies)
+    interaction_scale : float
+        Scaling factor for off-diagonal elements (interactions)
+        
+    Returns
+    -------
+    tuple
+        (original_matrix, adjusted_matrix)
+    """
+    import numpy as np
+    
     with open(filename, 'r') as file:
         lines = file.readlines()
     
+    # Find where matrix starts (first line starting with '[')
     matrix_start = next(i for i, line in enumerate(lines) if line.strip().startswith('['))
+    
+    # Read matrix
     matrix = []
     for line in lines[matrix_start:]:
         if line.strip().startswith('['):
-            row = [float(x)/1000 for x in line.strip()[1:-1].split(',')]
-            matrix.append(row)
+            # Clean up the line and convert to list of floats
+            cleaned = line.strip('[] \n').replace(' ', '')
+            values = [float(x)/1000 for x in cleaned.split(',')]  # Convert from meV to eV
+            matrix.append(values)
     
     original_matrix = np.array(matrix)
     adjusted_matrix = original_matrix.copy()
@@ -253,10 +278,11 @@ def analyze_pathway_differences(geometric_order, geometric_potentials,
         'thermodynamic_total': thermo_total
     }
 
-def calculate_delta_G(potentials, adjacent_only=True):
+def calculate_delta_G(potentials, adjacent_only=True, make_periodic=True):
     print("\nCalculating ΔG values:")
     print(f"Input potentials: {potentials}")
     print(f"Adjacent only mode: {adjacent_only}")
+    print(f"Periodic mode: {make_periodic}")
 
     n = len(potentials)
     delta_G = []
@@ -264,7 +290,11 @@ def calculate_delta_G(potentials, adjacent_only=True):
     if adjacent_only:
         print("\nCalculating ΔG for adjacent pairs only:")
         for i in range(n):
-            j = (i + 1) % n  # Circular sequence
+            # For last pair, only calculate if make_periodic is True
+            if i == n-1 and not make_periodic:
+                break
+                
+            j = (i + 1) % n  # Circular sequence if make_periodic, otherwise stops at n-1
             E_i = potentials[i+1]
             E_j = potentials[j+1]
             dG = -1 * ((-1 * E_i) + E_j)
@@ -344,25 +374,31 @@ def calculate_f_red_independent(E, E_values):
 
 def calculate_fractions(E_range, potentials, source_name):
     """Calculate oxidized and reduced fractions for a set of potentials"""
+    print(f"\nCalculating fractions for {source_name}")
+#   print("Potentials keys:", potentials.keys())
+    
     data = {}
     
     if 'independent' in potentials:
+        print("Processing independent model")
         ind_values = list(potentials['independent'].values())
         data[f'F_ox ({source_name} Independent)'] = [calculate_f_ox_independent(E, ind_values) for E in E_range]
         data[f'F_red ({source_name} Independent)'] = [calculate_f_red_independent(E, ind_values) for E in E_range]
     
     if 'sequential' in potentials:
+        print("Processing sequential model")
         for i, seq_potentials in enumerate(potentials['sequential']):
             seq_values = list(seq_potentials.values())
             data[f'F_ox ({source_name} Sequential {i+1})'] = [calculate_f_ox_sequential(E, seq_values) for E in E_range]
             data[f'F_red ({source_name} Sequential {i+1})'] = [calculate_f_red_sequential(E, seq_values) for E in E_range]
     
+#   print("Generated data keys:", data.keys())
     return data
 
 def plot_curves(E_range, all_data, filename, plot_option):
     plt.figure(figsize=(3.3, 3.3), dpi=600)
     
-    colors = {'BioDC': 'black', 'QM': 'red', 'Exp': 'blue'}
+    colors = {'BioDC': 'purple', 'QM': 'green', 'Exp': 'black'}
     
     # Process each source's data
     for source, data in all_data.items():
@@ -371,17 +407,25 @@ def plot_curves(E_range, all_data, filename, plot_option):
         # Only count sequential models for one type (ox) to get correct number
         num_sequential = sum(1 for key in data.keys() 
                            if 'Sequential' in key and 'ox' in key.lower())
-        grays = plt.cm.Greys(np.linspace(0.8, 0.2, num_sequential))[::-1]  # Reversed color gradient
+        
+        # Create color gradients for each source
+        if source == 'BioDC':
+            sequential_colors = plt.cm.Purples(np.linspace(0.8, 0.2, num_sequential))[::-1]
+        elif source == 'QM':
+            sequential_colors = plt.cm.Greens(np.linspace(0.8, 0.2, num_sequential))[::-1]
+        elif source == 'Exp':
+            sequential_colors = plt.cm.Greys(np.linspace(0.8, 0.2, num_sequential))[::-1]
         
         sequential_counter = 0
         for label, values in data.items():
             if (plot_option == 'ox' and 'ox' in label.lower()) or \
                (plot_option == 'red' and 'red' in label.lower()) or \
                plot_option == 'both':
+                
                 if 'Independent' in label:
                     color = 'white'
                 elif 'Sequential' in label:
-                    color = grays[sequential_counter % num_sequential]  # Use modulo to handle both ox and red
+                    color = sequential_colors[sequential_counter % num_sequential]
                     sequential_counter += 1
                 
                 linestyle = '--' if 'Independent' in label else '-'
@@ -391,23 +435,15 @@ def plot_curves(E_range, all_data, filename, plot_option):
                 # Only add annotations for BioDC curves
                 if source == 'BioDC':
                     if 'Independent' in label:
-                        mid_index = np.argmin(np.abs(np.array(values) - 0.5))
-                        x_mid = E_range[mid_index]
-                        y_mid = values[mid_index]
-                        
-                        plt.annotate("Ind.", xy=(x_mid - 0.08, y_mid), xycoords='data',
-                                    color='white', fontweight='bold', ha='center', va='center',
+                        plt.annotate("Ind.", xy=(0.1, 0.15), xycoords='axes fraction',
+                                    color='white', fontweight='bold', ha='left', va='center',
                                     bbox=dict(boxstyle='round,pad=0.2', fc='none', ec='none'),
                                     path_effects=[withStroke(linewidth=1, foreground=base_color)],
                                     fontsize=14)
                     
                     if 'Sequential' in label and (sequential_counter % num_sequential) == 0:
-                        mid_index = np.argmin(np.abs(np.array(values) - 0.5))
-                        x_mid = E_range[mid_index]
-                        y_mid = values[mid_index]
-                        
-                        plt.annotate("Seq.", xy=(x_mid + 0.1, y_mid), xycoords='data',
-                                    color='black', fontweight='bold', ha='center', va='center',
+                        plt.annotate("Seq.", xy=(0.1, 0.08), xycoords='axes fraction',
+                                    color='black', fontweight='bold', ha='left', va='center',
                                     bbox=dict(boxstyle='round,pad=0.2', fc='none', ec='none'),
                                     path_effects=[withStroke(linewidth=1, foreground=base_color)],
                                     fontsize=14)
@@ -576,7 +612,7 @@ def plot_potential_progression(name, energy_history, filename):
     plt.savefig(filename, dpi=600, bbox_inches='tight')
     plt.close()
 
-def process_matrix(name, filepath, model, energy_shift, interaction_scale, adjacent_only, output_dir):
+def process_matrix(name, filepath, model, energy_shift, interaction_scale, adjacent_only, make_periodic, output_dir):
     """Process a single matrix using one of two analysis modes.
 
     Parameters
@@ -586,131 +622,148 @@ def process_matrix(name, filepath, model, energy_shift, interaction_scale, adjac
     filepath : str
         Path to input matrix file
     model : str
-        Analysis mode to use:
-        - 'geo': Compare independent model to geometric sequence (structural order)
-        - 'seq': Compare independent model to sequential model (varying interaction levels)
+        Analysis mode to use ('geo' or 'seq')
     energy_shift : float
         Shift to apply to site energies (diagonal elements)
     interaction_scale : float
         Scaling factor for interaction energies (off-diagonal elements)
     adjacent_only : bool
         If True, only calculate ΔG between adjacent hemes
+    make_periodic : bool
+        If True, include step from last heme back to first
     output_dir : str
         Directory for output files
 
     Returns
     -------
     dict
-        Results dictionary containing analysis data for both independent and chosen model
+        Results dictionary containing analysis data
     """
-    if model not in ['geo', 'seq']:
-        raise ValueError("Model must be either 'geo' or 'seq'")
+    try:
+        if model not in ['geo', 'seq']:
+            raise ValueError("Model must be either 'geo' or 'seq'")
 
-    if not os.path.exists(filepath):
-        print(f"File not found: {filepath}")
-        return None
+        if not os.path.exists(filepath):
+            print(f"File not found: {filepath}")
+            return None
 
-    print(f"\n{'='*50}")
-    print(f"Processing matrix for {name}")
-    print(f"{'='*50}")
-    print(f"Parameters:")
-    print(f"  Model: {model}")
-    print(f"  Energy shift: {energy_shift}")
-    print(f"  Interaction scale: {interaction_scale}")
-    print(f"  Adjacent only: {adjacent_only}")
+        print(f"\n{'='*50}")
+        print(f"Processing matrix for {name}")
+        print(f"{'='*50}")
+        print(f"Parameters:")
+        print(f"  Model: {model}")
+        print(f"  Energy shift: {energy_shift}")
+        print(f"  Interaction scale: {interaction_scale}")
+        print(f"  Adjacent only: {adjacent_only}")
+        print(f"  Make periodic: {make_periodic}")
 
-    _, adjusted_matrix = read_energy_matrix(filepath, energy_shift, interaction_scale)
-    results = {}
+        _, adjusted_matrix = read_energy_matrix(filepath, energy_shift, interaction_scale)
+        results = {}
 
-    # Always calculate independent case first
-    print("\nCalculating independent model (reference case)...")
-    _, ind_history, ind_potentials = calculate_independent_oxidation(adjusted_matrix)
-    results['independent'] = ind_potentials
+        # Always calculate independent case first
+        print("\nCalculating independent model (reference case)...")
+        _, ind_history, ind_potentials = calculate_independent_oxidation(adjusted_matrix)
+        results['independent'] = ind_potentials
+        results['energy_history_ind'] = ind_history
 
-    # Calculate ΔG for independent case
-    delta_G_ind = calculate_delta_G(ind_potentials, adjacent_only)
-    if not adjacent_only:
-        delta_G_ind.sort(key=lambda x: abs(x[4]), reverse=True)
-    results['delta_G_ind'] = delta_G_ind
-    results['energy_history_ind'] = ind_history
-
-    # Write independent results
-    write_delta_G(os.path.join(output_dir, f'DG_ind_{name}.txt'), delta_G_ind)
-    plot_potential_progression(name, ind_history,
-                             os.path.join(output_dir, f'potential_progression_ind_{name}.png'))
-
-    # Geometric sequence calculations
-    if model == 'geo':
-        print("\nCalculating geometric model (structural sequence)...")
-        geometric_order, geo_history, geo_potentials = calculate_geometric_oxidation(adjusted_matrix)
-
-        # Store results in format compatible with find_global_potential_range
-        results['sequential'] = [geo_potentials]
-        results['geometric_order'] = geometric_order
-        results['energy_history_geo'] = geo_history
-
-        # Calculate ΔG for geometric case
-        delta_G_geo = calculate_delta_G(geo_potentials, adjacent_only)
+        # Calculate ΔG for independent case
+        delta_G_ind = calculate_delta_G(ind_potentials, adjacent_only, make_periodic)
         if not adjacent_only:
-            delta_G_geo.sort(key=lambda x: abs(x[4]), reverse=True)
-        results['delta_G_geo'] = delta_G_geo
+            delta_G_ind.sort(key=lambda x: abs(x[4]), reverse=True)
+        results['delta_G_ind'] = delta_G_ind
 
-        # Write geometric results
-        write_delta_G(os.path.join(output_dir, f'DG_geo_{name}.txt'), delta_G_geo)
+        # Write independent results
+        write_delta_G(os.path.join(output_dir, f'DG_ind_{name}.txt'), delta_G_ind)
+        plot_potential_progression(name, ind_history,
+                                 os.path.join(output_dir, f'potential_progression_ind_{name}.png'))
 
-        # Generate plots comparing independent vs geometric
-        if adjacent_only:
-            try:
-                plot_DG_landscape(output_dir, delta_G_ind, [delta_G_geo],
-                                f'DG_landscape_{name}.png')
-                print("\nΔG landscape plot generated")
-            except Exception as e:
-                print(f"Error generating landscape plot: {str(e)}")
+        if model == 'seq':
+            print("\nCalculating sequential model...")
+            sequential_potentials_all = []
+            delta_G_seq_all = []
+            energy_histories = []
 
-        plot_potential_progression(name, geo_history,
-                                 os.path.join(output_dir, f'potential_progression_geo_{name}.png'))
+            for interaction_level in range(1, len(adjusted_matrix) + 1):
+                print(f"\nCalculating with interaction level {interaction_level}...")
+                oxidation_order, history, _, seq_potentials = calculate_heme_oxidation(
+                    adjusted_matrix, interaction_level)
+                sequential_potentials_all.append(seq_potentials)
+                energy_histories.append(history)
 
-    # Sequential model calculations
-    elif model == 'seq':
-        print("\nCalculating sequential model (varying interaction levels)...")
-        sequential_potentials_all = []
-        delta_G_seq_all = []
-        energy_histories = []
+                delta_G_seq = calculate_delta_G(seq_potentials, adjacent_only, make_periodic)
+                if not adjacent_only:
+                    delta_G_seq.sort(key=lambda x: abs(x[4]), reverse=True)
+                delta_G_seq_all.append(delta_G_seq)
 
-        for interaction_level in range(1, len(adjusted_matrix) + 1):
-            print(f"\nCalculating with interaction level {interaction_level}...")
-            oxidation_order, history, _, seq_potentials = calculate_heme_oxidation(
-                adjusted_matrix, interaction_level)
-            sequential_potentials_all.append(seq_potentials)
-            energy_histories.append(history)
+                write_delta_G(os.path.join(output_dir, f'DG_seq_{name}_level_{interaction_level}.txt'),
+                             delta_G_seq)
+                plot_potential_progression(
+                    name, history,
+                    os.path.join(output_dir, f'potential_progression_seq_{name}_level_{interaction_level}.png'))
 
-            delta_G_seq = calculate_delta_G(seq_potentials, adjacent_only)
+            results['sequential'] = sequential_potentials_all
+            results['energy_histories_seq'] = energy_histories
+            results['delta_G_seq'] = delta_G_seq_all
+            results['energy_history_seq'] = energy_histories[-1]  # Store the final level history
+            
+            # Generate ΔG landscape plot if adjacent_only is True
+            if adjacent_only:
+                try:
+                    plot_DG_landscape(output_dir, delta_G_ind, delta_G_seq_all,
+                                    f'DG_landscape_{name}_seq.png')
+                    print("\nΔG landscape plot generated")
+                except Exception as e:
+                    print(f"Error generating landscape plot: {str(e)}")
+
+#           analyze_potential_changes(energy_histories[-1], "Sequential (highest interaction level)")
+            analyze_potential_changes(energy_histories[-1], 
+                                    "Sequential (highest interaction level)",
+                                    output_dir)
+        elif model == 'geo':
+            print("\nCalculating geometric model...")
+            geometric_order, geo_history, geo_potentials = calculate_geometric_oxidation(adjusted_matrix)
+            results['sequential'] = [geo_potentials]  # Keep format compatible with sequential
+            results['geometric_order'] = geometric_order
+            results['energy_history_geo'] = geo_history
+
+            delta_G_geo = calculate_delta_G(geo_potentials, adjacent_only, make_periodic)
             if not adjacent_only:
-                delta_G_seq.sort(key=lambda x: abs(x[4]), reverse=True)
-            delta_G_seq_all.append(delta_G_seq)
+                delta_G_geo.sort(key=lambda x: abs(x[4]), reverse=True)
+            results['delta_G_geo'] = delta_G_geo
 
-            # Write sequential results for each level
-            write_delta_G(os.path.join(output_dir, f'DG_seq_{name}_level_{interaction_level}.txt'),
-                         delta_G_seq)
+            write_delta_G(os.path.join(output_dir, f'DG_geo_{name}.txt'), delta_G_geo)
+            plot_potential_progression(name, geo_history,
+                                    os.path.join(output_dir, f'potential_progression_geo_{name}.png'))
 
-        # Store results in format compatible with find_global_potential_range
-        results['sequential'] = sequential_potentials_all
-        results['energy_histories_seq'] = energy_histories
-        results['delta_G_seq'] = delta_G_seq_all
+            # Generate ΔG landscape plot if adjacent_only is True
+            if adjacent_only:
+                try:
+                    plot_DG_landscape(output_dir, delta_G_ind, [delta_G_geo],
+                                    f'DG_landscape_{name}_geo.png')
+                    print("\nΔG landscape plot generated")
+                except Exception as e:
+                    print(f"Error generating landscape plot: {str(e)}")
 
-        # Generate plots comparing independent vs sequential
-        if adjacent_only:
-            try:
-                plot_DG_landscape(output_dir, delta_G_ind, delta_G_seq_all,
-                                f'DG_landscape_{name}.png')
-                print("\nΔG landscape plot generated")
-            except Exception as e:
-                print(f"Error generating landscape plot: {str(e)}")
+#           analyze_potential_changes(geo_history, "Geometric")
+            analyze_potential_changes(geo_history, "Geometric", output_dir)
 
-        plot_potential_progression(name, energy_histories[-1],
-                                 os.path.join(output_dir, f'potential_progression_seq_{name}.png'))
+        # Save final results for potential progression visualization
+        if model == 'seq':
+            save_potential_progression(
+                f'{name}_sequential_level_{len(adjusted_matrix)}',
+                results['energy_history_seq'],
+                output_dir)
+        elif model == 'geo':
+            save_potential_progression(
+                f'{name}_geometric',
+                results['energy_history_geo'],
+                output_dir)
 
-    return results
+        return results
+
+    except Exception as e:
+        print(f"Error processing matrix {name}: {str(e)}")
+        raise
 
 def find_global_potential_range(all_potentials):
     """
@@ -761,7 +814,7 @@ def save_data_to_text(filename, E_range, data_dict, E_values_seq_all, E_values_i
             row = "  ".join(f"{data:>{width}}" for data, width in zip(row_data, col_widths))
             textfile.write(row + "\n")
 
-def analyze_matrix(filepath, model, energy_shift=0, interaction_scale=1.0, adjacent_only=True):
+def analyze_matrix(filepath, model, energy_shift=0, interaction_scale=1.0, adjacent_only=True, make_periodic=True):
     """Analyze a single energy matrix with specified parameters"""
     _, adjusted_matrix = read_energy_matrix(filepath, energy_shift, interaction_scale)
     results = {}
@@ -770,7 +823,7 @@ def analyze_matrix(filepath, model, energy_shift=0, interaction_scale=1.0, adjac
         _, energy_history, ind_potentials, _ = calculate_heme_oxidation(adjusted_matrix)
         results['independent'] = ind_potentials
         # Calculate ΔG for independent potentials
-        delta_G_ind = calculate_delta_G(ind_potentials, adjacent_only)
+        delta_G_ind = calculate_delta_G(ind_potentials, adjacent_only, make_periodic)
         if not adjacent_only:
             delta_G_ind.sort(key=lambda x: abs(x[4]), reverse=True)
         results['delta_G_ind'] = delta_G_ind
@@ -786,7 +839,7 @@ def analyze_matrix(filepath, model, energy_shift=0, interaction_scale=1.0, adjac
             energy_histories.append(history)
 
             # Calculate ΔG for sequential potentials
-            delta_G_seq = calculate_delta_G(seq_potentials, adjacent_only)
+            delta_G_seq = calculate_delta_G(seq_potentials, adjacent_only, make_periodic)
             if not adjacent_only:
                 delta_G_seq.sort(key=lambda x: abs(x[4]), reverse=True)
             delta_G_seq_all.append(delta_G_seq)
@@ -797,56 +850,620 @@ def analyze_matrix(filepath, model, energy_shift=0, interaction_scale=1.0, adjac
 
     return results, adjusted_matrix
 
-if __name__ == "__main__":
-    import sys
+def print_potential_progression(name, energy_history):
+    """Print the potential progression for each heme at each oxidation stage.
 
-    # Validate command line arguments
-    if len(sys.argv) < 7:
-        print("Usage: script.py <plot_option> <adjacent_only> "
-              "<biodc_mat> <biodc_model> <biodc_eng_shift> <biodc_int_scale> "
-              "[<qm_mat> <qm_model> <qm_eng_shift> <qm_int_scale> "
-              "[<exp_mat> <exp_model> <exp_eng_shift> <exp_int_scale>]]")
-        sys.exit(1)
+    Parameters:
+    -----------
+    name : str
+        Name identifier for the analysis
+    energy_history : list
+        List of numpy arrays containing the potentials for each heme at each stage
+    """
+    num_hemes = len(energy_history[0])
+    num_stages = len(energy_history)
 
-    # Parse base arguments
-    plot_option = sys.argv[1]
-    adjacent_only = sys.argv[2].lower() == 'true'
+    print(f"\nPotential Progression Data for {name}")
+    print("=" * 50)
+
+    # Create headers for the table
+    headers = ["Heme"] + [f"Stage {i}" for i in range(num_stages)]
+
+    # Create rows for the table
+    table_data = []
+    for heme in range(num_hemes):
+        row = [f"Heme {heme + 1}"]
+        for stage in range(num_stages):
+            value = energy_history[stage][heme]
+            if np.isinf(value):
+                row.append("---")  # Replace inf with dashes for readability
+            else:
+                row.append(f"{value:.3f}")
+        table_data.append(row)
+
+    # Print the table using tabulate
+    print(tabulate(table_data, headers=headers, tablefmt="grid"))
+
+    # Print additional statistics
+    print("\nPotential Changes Summary:")
+    print("-" * 50)
+    for heme in range(num_hemes):
+        print(f"\nHeme {heme + 1}:")
+        last_finite = None
+        total_change = 0
+        changes = []
+
+        for stage in range(num_stages):
+            current = energy_history[stage][heme]
+            if not np.isinf(current):
+                if last_finite is not None:
+                    change = current - last_finite
+                    changes.append(change)
+                    print(f"  Stage {stage-1} → {stage}: {change:+.3f} eV")
+                    total_change += change
+                last_finite = current
+
+        if changes:
+            print(f"  Total change: {total_change:+.3f} eV")
+            print(f"  Average change: {total_change/len(changes):+.3f} eV")
+
+def save_potential_progression_csv(name, energy_history, output_dir):
+    """Save potential progression data to CSV file.
+
+    Parameters:
+    -----------
+    name : str
+        Name identifier for the analysis
+    energy_history : list
+        List of numpy arrays containing the potentials for each heme at each stage
+    output_dir : str
+        Directory to save the output files
+    """
+    import csv
+    import os
+
+    filename = os.path.join(output_dir, f'potential_progression_{name}.csv')
+
+    num_hemes = len(energy_history[0])
+    num_stages = len(energy_history)
+
+    # Create CSV file
+    with open(filename, 'w', newline='') as csvfile:
+        writer = csv.writer(csvfile)
+
+        # Write header
+        writer.writerow(['Heme'] + [f'Stage_{i}' for i in range(num_stages)])
+
+        # Write data for each heme
+        for heme in range(num_hemes):
+            row = [f'Heme_{heme + 1}']
+            for stage in range(num_stages):
+                value = energy_history[stage][heme]
+                if np.isinf(value):
+                    row.append('NA')  # Use 'NA' for infinite values
+                else:
+                    row.append(f'{value:.6f}')
+            writer.writerow(row)
+
+def save_potential_progression_json(name, energy_history, output_dir):
+    """Save potential progression data to JSON file.
+
+    Parameters:
+    -----------
+    name : str
+        Name identifier for the analysis
+    energy_history : list
+        List of numpy arrays containing the potentials for each heme at each stage
+    output_dir : str
+        Directory to save the output files
+    """
+    import json
+    import os
+
+    filename = os.path.join(output_dir, f'potential_progression_{name}.json')
+
+    num_hemes = len(energy_history[0])
+    num_stages = len(energy_history)
+
+    # Create data structure
+    data = {
+        'name': name,
+        'num_hemes': num_hemes,
+        'num_stages': num_stages,
+        'hemes': {}
+    }
+
+    # Add data for each heme
+    for heme in range(num_hemes):
+        heme_data = []
+        for stage in range(num_stages):
+            value = energy_history[stage][heme]
+            if np.isinf(value):
+                heme_data.append(None)  # Use None for infinite values
+            else:
+                heme_data.append(float(f'{value:.6f}'))
+        data['hemes'][f'Heme_{heme + 1}'] = heme_data
+
+    # Calculate and store changes between stages
+    changes = {}
+    for heme in range(num_hemes):
+        heme_changes = []
+        last_finite = None
+        for stage in range(num_stages):
+            current = energy_history[stage][heme]
+            if not np.isinf(current):
+                if last_finite is not None:
+                    change = float(f'{(current - last_finite):.6f}')
+                    heme_changes.append(change)
+                last_finite = current
+        changes[f'Heme_{heme + 1}'] = heme_changes
+    data['changes'] = changes
+
+    # Save to JSON file
+    with open(filename, 'w') as jsonfile:
+        json.dump(data, jsonfile, indent=2)
+
+def save_potential_progression(name, energy_history, output_dir):
+    """Save potential progression data in both CSV and JSON formats.
+
+    Parameters:
+    -----------
+    name : str
+        Name identifier for the analysis
+    energy_history : list
+        List of numpy arrays containing the potentials for each heme at each stage
+    output_dir : str
+        Directory to save the output files
+    """
+    save_potential_progression_csv(name, energy_history, output_dir)
+    save_potential_progression_json(name, energy_history, output_dir)
+
+def create_comparison_plot(sequential_results, geometric_results, directory):
+    """Create combined analysis plot comparing sequential and geometric pathways."""
+    try:
+        # Create figure
+        fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, figsize=(7, 7))
+
+        # Get number of hemes from the matrix size
+        num_hemes = len(sequential_results['energy_history_ind'][0])
+        heme_positions = range(1, num_hemes + 1)
+
+        # Get initial (independent) potentials
+        initial_potentials = sequential_results['energy_history_ind'][0]
+
+        # Safely calculate y-axis limits for top panels
+        def get_max_finite_value(history):
+            max_values = []
+            for stage in history:
+                finite_values = [e for e in stage if not np.isinf(e)]
+                if finite_values:
+                    max_values.append(max(finite_values))
+            return max(max_values) if max_values else max(initial_potentials)
+
+        y_min = min(initial_potentials) - abs(min(initial_potentials) * 0.1)
+        max_seq = get_max_finite_value(sequential_results['energy_history_seq'])
+        max_geo = get_max_finite_value(geometric_results['energy_history_geo'])
+        y_max = max(max_seq, max_geo) + abs(max(max_seq, max_geo) * 0.1)
+
+        # Add panel labels and configure ticks
+        for ax, label in zip([ax1, ax2, ax3, ax4], ['A', 'B', 'C', 'D']):
+            ax.text(-0.2, 1.05, f'({label})', transform=ax.transAxes,
+                    fontsize=10, fontweight='bold')
+            ax.tick_params(direction='in', which='both', top=True, right=True)
+
+        # Set up top panels (potential progression)
+        for ax in (ax1, ax2):
+            ax.grid(True, linestyle='--', alpha=0.3)
+            ax.set_xlabel('Heme Position')
+            ax.set_ylim(y_min, y_max)
+
+        ax1.set_ylabel('Potential (eV)')
+        ax2.tick_params(axis='y', which='both', labelleft=False)
+
+        # Add titles
+        ax1.text(0.98, 0.94, 'Thermodyn. Pathway',
+                 transform=ax1.transAxes, fontsize=10, va='top', ha='right',
+                 fontweight='bold')
+        ax2.text(0.98, 0.94, 'Geometric Pathway',
+                 transform=ax2.transAxes, fontsize=10, va='top', ha='right',
+                 fontweight='bold')
+
+        # Create blue gradient for oxidation order
+        blue_colors = plt.cm.Blues(np.linspace(0.3, 0.9, num_hemes))
+
+        # Plot initial potentials on top panels
+        for ax in (ax1, ax2):
+            ax.scatter(heme_positions, initial_potentials, color='gray',
+                      edgecolor='black', linewidth=1, s=50, zorder=2)
+
+        # Process Sequential Data (Top Left Panel)
+        seq_history = sequential_results['energy_history_seq']
+        seq_order = []
+        for stage in range(len(seq_history)):
+            energies = seq_history[stage]
+            for heme_num, energy in enumerate(energies):
+                if heme_num not in seq_order and np.isinf(energy):
+                    seq_order.append(heme_num)
+                    break
+
+        # Plot sequence for sequential pathway
+        for i, heme_num in enumerate(seq_order):
+            stages = [stage[heme_num] for stage in seq_history]
+            # Find the last finite value and its position
+            last_finite_idx = -1
+            last_finite_val = None
+            for j, val in enumerate(stages):
+                if not np.isinf(val):
+                    last_finite_idx = j
+                    last_finite_val = val
+                else:
+                    break
+
+            if last_finite_val is not None:
+                # Plot endpoint with number label
+                ax1.scatter([heme_num + 1], [last_finite_val], color=blue_colors[i],
+                           edgecolor='black', linewidth=1, s=50, zorder=4)
+                text = ax1.text(heme_num + 1.2, last_finite_val, f'{i+1}',
+                               color=blue_colors[i], fontsize=10,
+                               fontweight='bold', va='center')
+                text.set_path_effects([withStroke(linewidth=1.1, foreground='black')])
+
+                # Draw arrow if there's a change from initial
+                initial_val = stages[0]
+                if abs(last_finite_val - initial_val) > 0.001:
+                    ax1.annotate('',
+                        xy=(heme_num + 1, last_finite_val),
+                        xytext=(heme_num + 1, initial_val),
+                        arrowprops=dict(arrowstyle='->', color=blue_colors[i],
+                                      linewidth=2, mutation_scale=15),
+                        zorder=3
+                    )
+
+        # Process Geometric Data (Top Right Panel)
+        geo_history = geometric_results['energy_history_geo']
+        geo_order = geometric_results['geometric_order']
+
+        for i, heme_num in enumerate(geo_order):
+            stages = [stage[heme_num] for stage in geo_history]
+            # Find the last finite value and its position
+            last_finite_idx = -1
+            last_finite_val = None
+            for j, val in enumerate(stages):
+                if not np.isinf(val):
+                    last_finite_idx = j
+                    last_finite_val = val
+                else:
+                    break
+
+            if last_finite_val is not None:
+                # Plot endpoint with number label
+                ax2.scatter([heme_num + 1], [last_finite_val], color=blue_colors[i],
+                           edgecolor='black', linewidth=1, s=50, zorder=4)
+                text = ax2.text(heme_num + 1.2, last_finite_val, f'{i+1}',
+                               color=blue_colors[i], fontsize=10,
+                               fontweight='bold', va='center')
+                text.set_path_effects([withStroke(linewidth=1, foreground='black')])
+
+                # Draw arrow if there's a change from initial
+                initial_val = stages[0]
+                if abs(last_finite_val - initial_val) > 0.001:
+                    ax2.annotate('',
+                        xy=(heme_num + 1, last_finite_val),
+                        xytext=(heme_num + 1, initial_val),
+                        arrowprops=dict(arrowstyle='->', color=blue_colors[i],
+                                      linewidth=2, mutation_scale=15),
+                        zorder=3
+                    )
+
+        # Adjust top panel x limits
+        for ax in (ax1, ax2):
+            ax.set_xlim(0.5, num_hemes + 0.5)
+            ax.set_xticks(heme_positions)
+
+        # Set up bottom panels (ΔG landscapes)
+        dg_ind = [dg[4] for dg in sequential_results['delta_G_ind']]
+        dg_seq = [dg[4] for dg in sequential_results['delta_G_seq'][-1]]
+        dg_geo = [dg[4] for dg in geometric_results['delta_G_geo']]
+        et_steps = range(1, len(dg_ind) + 1)
+
+        for ax in (ax3, ax4):
+            ax.grid(True, linestyle='--', alpha=0.3)
+            ax.set_xlabel('Electron Transfer Step')
+
+        ax3.set_ylabel('ΔG (eV)')
+        ax4.tick_params(axis='y', which='both', labelleft=False)
+
+        # Calculate y-axis limits for bottom panels with buffer
+        dg_min = min(min(dg_ind), min(dg_seq), min(dg_geo))
+        dg_max = max(max(dg_ind), max(dg_seq), max(dg_geo))
+        dg_range = dg_max - dg_min
+        y_buffer = dg_range * 0.1
+
+        for ax in (ax3, ax4):
+            ax.set_ylim(dg_min - y_buffer, dg_max + y_buffer)
+
+        # Plot ΔG landscapes
+        # Independent (both panels)
+        for ax in (ax3, ax4):
+            ax.plot(et_steps, dg_ind, 'k:', zorder=1)
+            ax.scatter(et_steps, dg_ind, marker='s', s=100, facecolor='white',
+                      edgecolor='black', zorder=2)
+
+        # Sequential (left panel)
+        ax3.plot(et_steps, dg_seq, 'k:', zorder=1)
+        ax3.scatter(et_steps, dg_seq, marker='s', s=100, color='black', zorder=2)
+
+        # Geometric (right panel)
+        ax4.plot(et_steps, dg_geo, 'k:', zorder=1)
+        ax4.scatter(et_steps, dg_geo, marker='s', s=100, color='black', zorder=2)
+
+        # Add styled annotations for bottom panels
+        def style_two_line_text(ax, line1, x, y):
+            ax.text(x, y, line1, transform=ax.transAxes,
+                   fontsize=10, va='top', ha='right', fontweight='bold')
+            ind_text = ax.text(x, y-0.05, 'Independent',
+                             transform=ax.transAxes, fontsize=10,
+                             va='top', ha='right', fontweight='bold',
+                             color='white')
+            ind_text.set_path_effects([withStroke(linewidth=1, foreground='black')])
+
+        style_two_line_text(ax3, 'Thermodyn. vs.', 0.95, 0.95)
+        style_two_line_text(ax4, 'Geometric vs.', 0.95, 0.95)
+
+        plt.tight_layout()
+        output_path = os.path.join(directory, 'oxidation_pathway_comparison.png')
+        plt.savefig(output_path, dpi=300, bbox_inches='tight')
+        plt.close()
+
+        print(f"\nComparison plot saved to: {output_path}")
+
+#       print("\nAnalyzing potential changes in each pathway...")
+#       analyze_potential_changes(sequential_results['energy_history_seq'], "Sequential")
+#       analyze_potential_changes(geometric_results['energy_history_geo'], "Geometric")
+
+    except Exception as e:
+        print(f"Error in create_comparison_plot: {str(e)}")
+        print("Sequential results keys:", sequential_results.keys())
+        print("Geometric results keys:", geometric_results.keys())
+        raise
+
+def analyze_potential_changes(energy_history, name="", output_dir=None):
+    """Analyze how each heme's potential changes through the oxidation sequence."""
+    
+    # Prepare output
+    output_lines = []
+    def add_line(line=""):
+        print(line)
+        output_lines.append(line)
+
+    add_line(f"\n{name} Pathway Analysis:")
+    add_line("="*50)
+
+    num_hemes = len(energy_history[0])
+
+    # Determine oxidation order
+    oxidation_order = []
+    for stage in range(1, len(energy_history)):
+        for heme in range(num_hemes):
+            if not np.isinf(energy_history[stage-1][heme]) and np.isinf(energy_history[stage][heme]):
+                oxidation_order.append(heme)
+                break
+
+    for heme in range(num_hemes):
+        initial_potential = energy_history[0][heme]
+        add_line(f"\nHeme {heme + 1}:")
+        add_line(f"Initial potential: {initial_potential:.3f} eV")
+
+        last_finite = initial_potential
+        total_change = 0
+        changes = []
+
+        for stage in range(1, len(energy_history)):
+            current = energy_history[stage][heme]
+            if not np.isinf(current):
+                change = current - last_finite
+                changes.append(change)
+                oxidized_heme = oxidation_order[stage-1] + 1
+                add_line(f"Step {stage}: {change:+.3f} eV (When Heme {oxidized_heme} is oxidized)")
+                total_change += change
+                last_finite = current
+            elif np.isinf(current):
+                if changes:
+                    add_line(f"Cumulative shift before oxidation: {total_change:+.3f} eV")
+                add_line(f"Oxidized at step {stage}")
+                break
+
+    add_line("\nAnalysis complete.")
+
+    # Save to file if output_dir is provided
+    if output_dir:
+        clean_name = name.lower().replace(" ", "_") \
+                        .replace("(", "") \
+                        .replace(")", "") \
+                        .replace(",", "")
+        filename = os.path.join(output_dir, f'potential_changes_{clean_name}.txt')
+
+        with open(filename, 'w') as f:
+            for line in output_lines:
+                f.write(line + '\n')
+        print(f"\nAnalysis saved to: {filename}")
+
+def find_midpoint_potential(E_range, f_red):
+    """Find the potential where reduced fraction equals 0.5.
+    
+    Parameters:
+    -----------
+    E_range : array-like
+        Array of potential values
+    f_red : array-like
+        Array of reduced fractions corresponding to E_range
+        
+    Returns:
+    --------
+    float
+        Potential value where f_red = 0.5
+    """
+    # Find the index where f_red is closest to 0.5
+    idx = np.argmin(np.abs(np.array(f_red) - 0.5))
+    
+    # If we're exactly at 0.5, return that potential
+    if abs(f_red[idx] - 0.5) < 1e-6:
+        return E_range[idx]
+    
+    # Otherwise, interpolate between closest points
+    if idx > 0 and idx < len(E_range) - 1:
+        # Find points on either side of 0.5
+        if f_red[idx] > 0.5:
+            idx_before, idx_after = idx, idx + 1
+        else:
+            idx_before, idx_after = idx - 1, idx
+            
+        # Linear interpolation
+        E1, E2 = E_range[idx_before], E_range[idx_after]
+        f1, f2 = f_red[idx_before], f_red[idx_after]
+        
+        return E1 + (E2 - E1) * (0.5 - f1) / (f2 - f1)
+    
+    return E_range[idx]
+
+def analyze_midpoint_potentials(E_range, potentials, source_name):
+    """Analyze midpoint potentials for all models.
+    
+    Parameters:
+    -----------
+    E_range : array-like
+        Array of potential values
+    potentials : dict
+        Dictionary containing potential values for different models
+    source_name : str
+        Name identifier for the data source
+        
+    Returns:
+    --------
+    dict
+        Dictionary containing midpoint potentials for each model
+    """
+    results = {}
+    
+    if 'independent' in potentials:
+        print(f"\nAnalyzing midpoint potentials for {source_name} (Independent model)")
+        ind_values = list(potentials['independent'].values())
+        f_red = [calculate_f_red_independent(E, ind_values) for E in E_range]
+        E_half = find_midpoint_potential(E_range, f_red)
+        results['independent'] = E_half
+        print(f"Independent model E1/2: {E_half:.3f} V")
+    
+    if 'sequential' in potentials:
+        results['sequential'] = []
+        for i, seq_potentials in enumerate(potentials['sequential']):
+            print(f"\nAnalyzing {source_name} Sequential model (Level {i+1})")
+            seq_values = list(seq_potentials.values())
+            f_red = [calculate_f_red_sequential(E, seq_values) for E in E_range]
+            E_half = find_midpoint_potential(E_range, f_red)
+            results['sequential'].append(E_half)
+            print(f"Sequential model (Level {i+1}) E1/2: {E_half:.3f} V")
+    
+    return results
+
+def main():
+    """Main function for heme cooperativity analysis."""
+    parser = ArgumentParser(description='Analyze heme cooperativity')
+    parser.add_argument('plot_option', help='Plot option (ox, red, or both)')
+    parser.add_argument('adjacent_only', type=str, help='Calculate only adjacent hemes (true/false)')
+    parser.add_argument('make_periodic', type=str, help='Include step from last heme back to first (true/false)')
+    parser.add_argument('biodc_mat', help='BioDC matrix file')
+    parser.add_argument('biodc_model', help='BioDC model type (geo, seq, or both)')
+    parser.add_argument('biodc_eng_shift', type=float, help='BioDC energy shift')
+    parser.add_argument('biodc_int_scale', type=float, help='BioDC interaction scale')
+    parser.add_argument('qm_mat', nargs='?', help='QM matrix file')
+    parser.add_argument('qm_model', nargs='?', help='QM model type')
+    parser.add_argument('qm_eng_shift', type=float, nargs='?', help='QM energy shift')
+    parser.add_argument('qm_int_scale', type=float, nargs='?', help='QM interaction scale')
+    parser.add_argument('exp_mat', nargs='?', help='Experimental matrix file')
+    parser.add_argument('exp_model', nargs='?', help='Experimental model type')
+    parser.add_argument('exp_eng_shift', type=float, nargs='?', help='Experimental energy shift')
+    parser.add_argument('exp_int_scale', type=float, nargs='?', help='Experimental interaction scale')
+
+    args = parser.parse_args()
+
+    # Convert arguments
+    adjacent_only = args.adjacent_only.lower() == 'true'
+    make_periodic = args.make_periodic.lower() == 'true'
 
     # Create output directory
     output_dir = ensure_output_dir('.')
 
+    print("\nDebug - Command line arguments:")
+    print(f"biodc_mat: {args.biodc_mat}")
+    print(f"biodc_model: {args.biodc_model}")
+    print(f"biodc_eng_shift: {args.biodc_eng_shift}")
+    print(f"biodc_int_scale: {args.biodc_int_scale}")
+    print(f"qm_mat: {args.qm_mat}")
+    print(f"qm_model: {args.qm_model}")
+    print(f"qm_eng_shift: {args.qm_eng_shift}")
+    print(f"qm_int_scale: {args.qm_int_scale}")
+    print(f"exp_mat: {args.exp_mat}")
+    print(f"exp_model: {args.exp_model}")
+    print(f"exp_eng_shift: {args.exp_eng_shift}")
+    print(f"exp_int_scale: {args.exp_int_scale}")
+
     # Process matrices
-    matrices = []
-    i = 3
-    while i < len(sys.argv):
-        if i + 3 >= len(sys.argv):
-            break
-
-        filepath = sys.argv[i]
-        model = sys.argv[i+1]
-        energy_shift = float(sys.argv[i+2])
-        interaction_scale = float(sys.argv[i+3])
-
-        matrices.append((filepath, model, energy_shift, interaction_scale))
-        i += 4
-
-    # Ensure we have complete sets of arguments
-    if len(matrices) not in [1, 2, 3]:
-        print("Error: Incomplete matrix parameters")
-        sys.exit(1)
-
-    # Process each matrix
-    results = {}
+    all_results = {}
     source_names = ['BioDC', 'QM', 'Exp']
-    for (filepath, model, energy_shift, interaction_scale), name in zip(matrices, source_names):
-        result = process_matrix(name, filepath, model, energy_shift, interaction_scale,
-                              adjacent_only, output_dir)
-        if result:
-            results[name] = result
+    matrices_info = [
+        (args.biodc_mat, args.biodc_model, args.biodc_eng_shift, args.biodc_int_scale),
+        (args.qm_mat, args.qm_model, args.qm_eng_shift, args.qm_int_scale),
+        (args.exp_mat, args.exp_model, args.exp_eng_shift, args.exp_int_scale)
+    ]
 
-    # Find global potential range and calculate fractions
+    # Filter out incomplete matrix entries
+    matrices = []
+    valid_names = []
+    for i, (mat, model, shift, scale) in enumerate(matrices_info):
+        if all(x is not None for x in (mat, model, shift, scale)):
+            matrices.append((mat, model, shift, scale))
+            valid_names.append(source_names[i])
+
+    print(f"\nProcessing {len(matrices)} matrices with names: {valid_names}")
+
+    for (filepath, model, energy_shift, interaction_scale), name in zip(matrices, valid_names):
+        print(f"\nProcessing {name} matrix:")
+        print(f"  File: {filepath}")
+        print(f"  Model: {model}")
+        print(f"  Energy shift: {energy_shift}")
+        print(f"  Interaction scale: {interaction_scale}")
+
+        try:
+            if model.lower() == 'both':
+                # Process both models
+                seq_result = process_matrix(name, filepath, 'seq', energy_shift,
+                                         interaction_scale, adjacent_only, make_periodic, output_dir)
+                geo_result = process_matrix(name, filepath, 'geo', energy_shift,
+                                         interaction_scale, adjacent_only, make_periodic, output_dir)
+
+                if seq_result and geo_result:
+                    # Create comparison plot
+                    create_comparison_plot(seq_result, geo_result, output_dir)
+
+                    # Store results
+                    all_results[f"{name}_seq"] = seq_result
+                    all_results[f"{name}_geo"] = geo_result
+            else:
+                # Process single model
+                result = process_matrix(name, filepath, model, energy_shift, interaction_scale,
+                                      adjacent_only, make_periodic, output_dir)
+                if result:
+                    all_results[name] = result
+
+        except Exception as e:
+            print(f"Error processing {name} matrix: {str(e)}")
+            import traceback
+            print(traceback.format_exc())
+            continue
+
+    # Find global potential range for redox plots
     all_potentials = []
-    for result in results.values():
+    for result in all_results.values():
         if 'independent' in result:
             all_potentials.append({'independent': result['independent']})
         if 'sequential' in result:
@@ -855,16 +1472,102 @@ if __name__ == "__main__":
     lower_bound, upper_bound = find_global_potential_range(all_potentials)
     E_range = np.linspace(lower_bound, upper_bound, 1600)
 
-    # Calculate fractions and prepare for plotting
-    all_data = {}
-    for name, result in results.items():
-        all_data[name] = calculate_fractions(E_range, result, name)
+    print("\nAnalyzing Midpoint Potentials")
+    print("=" * 50)
+    
+    midpoint_results = {}
+    for name, result in all_results.items():
+        if result:
+            midpoint_results[name] = analyze_midpoint_potentials(E_range, result, name)
+    
+    # Save midpoint potential results to file
+    output_file = os.path.join(output_dir, 'midpoint_potentials.txt')
+    with open(output_file, 'w') as f:
+        f.write("Midpoint Potential Analysis Results\n")
+        f.write("=" * 50 + "\n\n")
+        
+        for source, results in midpoint_results.items():
+            f.write(f"\n{source}:\n")
+            f.write("-" * len(source) + "\n")
+            
+            if 'independent' in results:
+                f.write(f"Independent model E1/2: {results['independent']:.3f} V vs. SHE\n")
+            
+            if 'sequential' in results:
+                for i, E_half in enumerate(results['sequential']):
+                    f.write(f"Sequential model (Level {i+1}) E1/2: {E_half:.3f} V vs. SHE\n")
+            
+            f.write("\n")
+    
+    print(f"\nMidpoint potential analysis results saved to: {output_file}")
 
-    # Save all data to single file in output directory
-    data_dict = {}
-    for source_data in all_data.values():
-        data_dict.update(source_data)
-    save_data_to_text(os.path.join(output_dir, 'redox_data.txt'), E_range, data_dict, [], {})
+    # Calculate fractions and create plots for each model type
+    if args.biodc_model.lower() == 'both':
+        # Handle both models case
+        for model_type in ['seq', 'geo']:
+            try:
+                print(f"\nProcessing {model_type} model...")
+                print(f"All results keys: {all_results.keys()}")
+                
+                # Get data for all sources for this model type
+                plot_data = {}
+                for name, result in all_results.items():
+                    print(f"Processing result for {name}")
+                    # Handle BioDC's special case (ends with _seq or _geo)
+                    if name.endswith(f"_{model_type}"):
+                        source_name = name.replace(f"_{model_type}", "")
+                        print(f"Adding {source_name} to plot_data")
+                        plot_data[source_name] = calculate_fractions(E_range, result, source_name)
+                    # Handle QM and Exp (no suffix)
+                    elif name in ['QM', 'Exp']:
+                        print(f"Adding {name} to plot_data")
+                        plot_data[name] = calculate_fractions(E_range, result, name)
+                
+                print(f"Final plot_data keys: {plot_data.keys()}")
+                
+                if plot_data:  # Only proceed if we have data
+                    # Save data for each source
+                    for source_name, source_data in plot_data.items():
+                        output_data_file = os.path.join(output_dir, f'redox_data_{source_name}_{model_type}.txt')
+                        save_data_to_text(output_data_file, E_range, source_data, [], {})
+                        print(f"Saved data for {source_name} to {output_data_file}")
+                    
+                    # Create plot with all sources
+                    output_plot_file = os.path.join(output_dir, f'redox_plot_{model_type}.png')
+                    plot_curves(E_range, plot_data, output_plot_file, args.plot_option)
+                    print(f"Saved plot to {output_plot_file}")
+                else:
+                    print(f"No data found for {model_type} model")
 
-    # Plot combined curves
-    plot_curves(E_range, all_data, os.path.join(output_dir, 'redox_plot.png'), plot_option)
+            except Exception as e:
+                print(f"Error processing {model_type} model: {str(e)}")
+                import traceback
+                print(traceback.format_exc())
+                continue
+
+    else:
+        # Handle single model case - use all results
+        try:
+            print(f"\nProcessing single model: {args.biodc_model}")
+            plot_data = {}
+            for name, result in all_results.items():
+                # Create nested structure required by plot_curves
+                plot_data[name] = calculate_fractions(E_range, result, name)
+            
+            # Save data for each source
+            for source_name, source_data in plot_data.items():
+                output_data_file = os.path.join(output_dir, f'redox_data_{source_name}_{args.biodc_model}.txt')
+                save_data_to_text(output_data_file, E_range, source_data, [], {})
+                print(f"Saved data for {source_name} to {output_data_file}")
+            
+            output_plot_file = os.path.join(output_dir, f'redox_plot_{args.biodc_model}.png')
+            plot_curves(E_range, plot_data, output_plot_file, args.plot_option)
+            print(f"Saved plot to {output_plot_file}")
+
+        except Exception as e:
+            print(f"Error processing single model: {str(e)}")
+            import traceback
+            print(traceback.format_exc())
+
+if __name__ == "__main__":
+    sys.exit(main())

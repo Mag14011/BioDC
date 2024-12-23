@@ -1,155 +1,297 @@
-################################################################################################################################################
-# Generic Modules
+################################################################################
+# Refactored PairedChargeAssignment Module
+# This module handles the generation of topology files and coordinates for pairs 
+# of heme groups in different redox states.
+################################################################################
+
+from dataclasses import dataclass
+from enum import Enum
+from typing import List, Dict, Tuple, Optional, Set
 import os
 import sys
 import itertools
 import subprocess
-from subprocess import Popen
-################################################################################################################################################
+from pathlib import Path
 
-def insert_ter_records(pdb_file, output_file):
-    with open(pdb_file, 'r') as file:
-        lines = file.readlines()
+class HemeType(Enum):
+    B = "b"
+    C = "c"
 
-    modified_lines = []
-    i = 0
-    while i < len(lines):
-        line = lines[i]
+class LigationType(Enum):
+    HIS_HIS = "HH"
+    HIS_MET = "HM"
 
-        # Check for N followed by H1, H2, H3
-        if line.startswith("ATOM") and line[12:16].strip() == "N":
-            # Check if the previous line starts with CRYST1
-            if i > 0 and not lines[i-1].startswith("CRYST1"):
-                # Check for TER before N
-                if not (modified_lines and modified_lines[-1].startswith("TER")):
+class RedoxState(Enum):
+    OXIDIZED = "o"
+    REDUCED = "r"
+
+@dataclass
+class HemeDefinition:
+    """Represents a single heme definition with its properties"""
+    heme_id: int
+    heme_type: HemeType
+    ligation_type: LigationType
+    cys_b: Optional[int] = None  # Only for c-type hemes
+    cys_c: Optional[int] = None  # Only for c-type hemes
+    ligand_proximal: int = 0
+    ligand_distal: int = 0
+
+    def is_c_type(self) -> bool:
+        return self.heme_type == HemeType.C
+
+    def is_his_his(self) -> bool:
+        return self.ligation_type == LigationType.HIS_HIS
+
+class PDBProcessor:
+    """Handles PDB file processing and TER record insertion"""
+    
+    @staticmethod
+    def insert_ter_records(pdb_file: str, output_file: str):
+        """Insert TER records at appropriate positions in PDB file"""
+        try:
+            with open(pdb_file, 'r') as file:
+                lines = file.readlines()
+
+            modified_lines = []
+            
+            i = 0
+            while i < len(lines):
+                line = lines[i]
+                
+                # Skip non-ATOM/HETATM lines but preserve them
+                if not line.startswith(('ATOM', 'HETATM')):
+                    if not line.startswith('TER'):  # Don't duplicate TER records
+                        modified_lines.append(line)
+                    i += 1
+                    continue
+
+                # Case 1: After OXT atom
+                if line[12:16].strip() == "OXT":
+                    modified_lines.append(line)
+                    if i + 1 < len(lines) and not lines[i+1].startswith('TER'):
+                        chain = line[21]
+                        resnum = int(line[22:26])
+                        ter_record = f"TER   {str(len(modified_lines)+1).rjust(5)}      {resnum:4}    {chain}\n"
+                        modified_lines.append(ter_record)
+                    i += 1
+                    continue
+
+                # Case 2: Before N-terminal residue
+                if line[12:16].strip() == "N":
+                    # Check for H1, H2, H3 pattern
                     if (i + 3 < len(lines) and
-                        lines[i+1].startswith("ATOM") and lines[i+1][12:16].strip() == "H1" and
-                        lines[i+2].startswith("ATOM") and lines[i+2][12:16].strip() == "H2" and
-                        lines[i+3].startswith("ATOM") and lines[i+3][12:16].strip() == "H3"):
-                        # Insert TER if the sequence N, H1, H2, H3 is found
-                        modified_lines.append("TER\n")
+                        all(lines[i+j].startswith('ATOM') and 
+                            lines[i+j][12:16].strip() == f"H{j}" 
+                            for j in range(1, 4))):
+                        if not (modified_lines and modified_lines[-1].startswith('TER')):
+                            chain = line[21]
+                            resnum = int(line[22:26])
+                            ter_record = f"TER   {str(len(modified_lines)+1).rjust(5)}      {resnum:4}    {chain}\n"
+                            modified_lines.append(ter_record)
+                    # Check for H2, H3 pattern
+                    elif (i + 2 < len(lines) and
+                          lines[i+1].startswith('ATOM') and lines[i+1][12:16].strip() == "H2" and
+                          lines[i+2].startswith('ATOM') and lines[i+2][12:16].strip() == "H3"):
+                        if not (modified_lines and modified_lines[-1].startswith('TER')):
+                            chain = line[21]
+                            resnum = int(line[22:26])
+                            ter_record = f"TER   {str(len(modified_lines)+1).rjust(5)}      {resnum:4}    {chain}\n"
+                            modified_lines.append(ter_record)
 
-        # Check for N followed by H2, H3
-        if line.startswith("ATOM") and line[12:16].strip() == "N":
-            # Check if the previous line starts with CRYST1
-            if i > 0 and not lines[i-1].startswith("CRYST1"):
-                # Check for TER before N
-                if not (modified_lines and modified_lines[-1].startswith("TER")):
-                    if (i + 2 < len(lines) and
-                        lines[i+1].startswith("ATOM") and lines[i+1][12:16].strip() == "H2" and
-                        lines[i+2].startswith("ATOM") and lines[i+2][12:16].strip() == "H3"):
-                        # Insert TER if the sequence N, H2, H3 is found
-                        modified_lines.append("TER\n")
+                modified_lines.append(line)
+                i += 1
 
-        modified_lines.append(line)
+            # Add final TER if the last line was an ATOM/HETATM record
+            if modified_lines and modified_lines[-1].startswith(("ATOM", "HETATM")):
+                last_line = modified_lines[-1]
+                chain = last_line[21]
+                resnum = int(last_line[22:26])
+                ter_record = f"TER   {str(len(modified_lines)+1).rjust(5)}      {resnum:4}    {chain}\n"
+                modified_lines.append(ter_record)
 
-        # Ensure there is a TER record after OXT
-        if line.startswith("ATOM") and line[12:16].strip() == "OXT":
-            if (i + 1 >= len(lines) or not lines[i + 1].startswith("TER")):
-                modified_lines.append("TER\n")
+            # Write the modified file
+            with open(output_file, 'w') as file:
+                file.writelines(modified_lines)
 
-        i += 1
+        except Exception as e:
+            print(f"Error processing PDB file: {str(e)}")
+            raise
 
-    with open(output_file, 'w') as file:
-        file.writelines(modified_lines)
+class ForceFieldParameters:
+    """Manages force field parameters and their loading"""
+    def __init__(self, force_field_dir: str, ff_choice: str):
+        self.dir = force_field_dir
+        self.ff_choice = ff_choice.lower()
 
-def PairedChargeAssignment(ForceFieldDir, FFchoice, SelRefRedoxState, InputDict):
+    def get_lib_name(self, heme_type: HemeType, ligation: LigationType, 
+                     redox: RedoxState) -> str:
+        """Get library file name based on heme properties"""
+        prefix = "Henriques_" if (self.ff_choice == "henriques" and 
+                                 heme_type == HemeType.C and 
+                                 ligation == LigationType.HIS_HIS) else ""
+        redox_state = "Oxidized" if redox == RedoxState.OXIDIZED else "Reduced"
+        ligation_text = "HisHisLigated" if ligation == LigationType.HIS_HIS else "HisMetLigated"
+        heme_text = f"{heme_type.value}-heme"
+        
+        return f"{prefix}{redox_state}_{ligation_text}_{heme_text}_RESP.lib"
 
-#------------------------------------------------------------------------------
-# Count how many of each type of heme are present.
-#------------------------------------------------------------------------------
-    Count_c_HH = 0
-    Count_c_HM = 0
-    Count_b_HH = 0
-    Count_b_HM = 0
+    def get_frcmod_name(self, heme_type: HemeType, ligation: LigationType, 
+                        redox: RedoxState) -> str:
+        """Get force field modification file name"""
+        redox_state = "Oxidized" if redox == RedoxState.OXIDIZED else "Reduced"
+        ligation_text = "HisHisLigated" if ligation == LigationType.HIS_HIS else "HisMetLigated"
+        heme_text = f"{heme_type.value}-heme"
+        
+        return f"{redox_state}_{ligation_text}_{heme_text}.frcmod"
 
-    with open("ResIndexing.txt") as fp:
-        NumHEC = len(fp.readlines())
-        HemID = [0]*NumHEC
-        fp.seek(0)
+class VMDScriptGenerator:
+    """Generates VMD scripts for redox state modifications"""
+    def __init__(self, output_file: str):
+        print(f"Opening {output_file} for writing...")
+        self.file = open(output_file, 'w')
+        self._write_header()
+        
+    def _write_header(self):
+        print("\nmol new RefState.pdb", file=self.file)
+        
+    def add_heme_modification(self, heme: HemeDefinition, redox: RedoxState):
+        """Add commands for modifying a specific heme"""
+        state = "Oxidized" if redox == RedoxState.OXIDIZED else "Reduced"
+        residue_prefixes = self._get_residue_prefixes(heme, redox)
+        selection_patterns = self._get_selection_patterns(heme.heme_type, heme.ligation_type)
+        
+        print(f"\n #-------------------------------------------------------------------------", file=self.file)
+        print(f" #{state} Heme-{heme.heme_id}: {heme.ligation_type.value} ligated {heme.heme_type.value}-type heme", file=self.file)
+        
+        self._write_atom_selections(heme, selection_patterns)
+        self._write_residue_modifications(heme, residue_prefixes, state)
 
-        Lines = fp.readlines()
-        for line in Lines:
-            EntryLength = len(line.strip().split(" "))
-            HemeType = line.strip().split(" ")[-2]
-            AxLigType = line.strip().split(" ")[-1]
+    def _get_selection_patterns(self, heme_type: HemeType, ligation: LigationType) -> Dict[str, str]:
+        """Get patterns that match both oxidized and reduced states for selections"""
+        patterns = {
+            (HemeType.C, LigationType.HIS_HIS): {
+                'his_p': 'PHO PHR',  # Proximal His (both oxidized and reduced)
+                'his_d': 'DHO DHR',  # Distal His
+                'hem': 'HCO HCR'     # c-type heme
+            },
+            (HemeType.C, LigationType.HIS_MET): {
+                'his_p': 'PMO PMR',  # Proximal His
+                'met_d': 'DMO DMR',  # Distal Met
+                'hem': 'MCO MCR'     # c-type heme
+            },
+            (HemeType.B, LigationType.HIS_HIS): {
+                'his_p': 'FHO FHR',  # Proximal His
+                'his_d': 'RHO RHR',  # Distal His
+                'hem': 'HBO HBR'     # b-type heme
+            },
+            (HemeType.B, LigationType.HIS_MET): {
+                'his_p': 'FMO FMR',  # Proximal His
+                'met_d': 'RMO RMR',  # Distal Met
+                'hem': 'MBO MBR'     # b-type heme
+            }
+        }
+        return patterns[(heme_type, ligation)]
 
-            if ( EntryLength == 8 ) and ( HemeType == "c") and ( AxLigType == "HH" ):
-                Count_c_HH+=1
-            elif ( EntryLength == 8 ) and ( HemeType == "c") and ( AxLigType == "HM" ):
-                Count_c_HM+=1
-            elif ( EntryLength == 6 ) and ( HemeType == "b") and ( AxLigType == "HH" ):
-                Count_b_HH+=1
-            elif ( EntryLength == 6 ) and ( HemeType == "b") and ( AxLigType == "HM" ):
-                Count_b_HM+=1
+    def _get_residue_prefixes(self, heme: HemeDefinition, redox: RedoxState) -> Dict[str, str]:
+        """Get the target residue names based on desired redox state"""
+        is_oxidized = redox == RedoxState.OXIDIZED
+        
+        prefix_mapping = {
+            (HemeType.C, LigationType.HIS_HIS): {
+                'his_p': 'PHO' if is_oxidized else 'PHR',
+                'his_d': 'DHO' if is_oxidized else 'DHR',
+                'hem': 'HCO' if is_oxidized else 'HCR'
+            },
+            (HemeType.C, LigationType.HIS_MET): {
+                'his_p': 'PMO' if is_oxidized else 'PMR',
+                'met_d': 'DMO' if is_oxidized else 'DMR',
+                'hem': 'MCO' if is_oxidized else 'MCR'
+            },
+            (HemeType.B, LigationType.HIS_HIS): {
+                'his_p': 'FHO' if is_oxidized else 'FHR',
+                'his_d': 'RHO' if is_oxidized else 'RHR',
+                'hem': 'HBO' if is_oxidized else 'HBR'
+            },
+            (HemeType.B, LigationType.HIS_MET): {
+                'his_p': 'FMO' if is_oxidized else 'FMR',
+                'met_d': 'RMO' if is_oxidized else 'RMR',
+                'hem': 'MBO' if is_oxidized else 'MBR'
+            }
+        }
+        return prefix_mapping[(heme.heme_type, heme.ligation_type)]
 
-    if ( len(HemID) != (Count_c_HH + Count_c_HM + Count_b_HH +Count_b_HM)):
-        sys.exit(f"""
- The total number of hemes ({len(HemID)}) in ResIndexing.txt 
- does NOT equl the sum of c-type His-His ({Count_c_HH}), 
- b-type His-His ({Count_b_HH}), c-type His-Met ({Count_c_HM}),
- and b-type His-Met ({Count_b_HM}) hemes. These are the only
- types of hemes that can currently be analyzed with BioDC.
- Please revise ResIndexing.txt before re-running BioDC.""")
-
-#------------------------------------------------------------------------------
-# Determine the unique pairwise heme combinations among the selected hemes.
-# The selected hemes are those specified as the linear sequence to 
-# LinearizeHemeSequence.py. 
-#------------------------------------------------------------------------------
-    idx=0
-    if (os.path.isfile("SelResIndexing.txt") == True):
-        with open("SelResIndexing.txt") as fp:
-            NumHEC = len(fp.readlines())
-            print(f"   There are {NumHEC} hemes")
-            HEM = [0]*NumHEC
-            ActiveIDs = [0]*NumHEC
-            fp.seek(0)
-
-            Lines = fp.readlines()
-            for line in Lines:
-                HEM[idx] = int(line.strip().split(" ")[-3])
-                ActiveIDs[idx] = line
-                idx+=1
-        PairCount = list(itertools.combinations(HEM, r=2))
-        print(f"   There is/are {len(PairCount)} unique heme-heme pairwise interactions")
-
-    elif (os.path.isfile("SelResIndexing.txt") == False):
-        sys.exit("""
-SelResIndexing.txt is missing.
-Something went wrong when you defined
-the linear sequence of hemes.
-
-This problem must be resolved before 
-proceeding.""")
-
-#------------------------------------------------------------------------------
-# Loop over the unique heme pairs, writing a TCL script for VMD and an input
-# file for TLEaP for each pair. The VMD script changes residue names to be 
-# consistent with the redox microstate for the heme pair (OO, OR, RO, and RR, 
-# where O = oxidized heme, R = reduced heme.) The generated four PDBs are read
-# into TLEaP, which builds the corresponding topologies (prmtop) and coordinate
-# (rst7) files. 
-#------------------------------------------------------------------------------
-    for i in range(len(PairCount)):
-        Hi = PairCount[i][0] 
-        Hj = PairCount[i][1]
-        CYSb = [0]*2
-        CYSc = [0]*2
-        Ligp = [0]*2
-        Ligd = [0]*2
-
-        VMDinput=f"PairInt_{Hi}-{Hj}.tcl"
-        TLEaPinput=f"GeneratePairIntTopologiesForHems{Hi}-{Hj}.in" 
-
+    def _write_atom_selections(self, heme: HemeDefinition, selection_patterns: Dict[str, str]):
+        """Write VMD atom selection commands using patterns that match both states"""
+        is_his_met = heme.ligation_type == LigationType.HIS_MET
+        ligand_key = 'met_d' if is_his_met else 'his_d'
+        
         print(f"""
- ------------------------------------------------
- Topologies for Heme Pair {Hi} - {Hj} 
- ------------------------------------------------""")
+ #Define atom groups
+   set HISp  [atomselect top "resname {selection_patterns['his_p']} and resid {heme.ligand_proximal}"]
+   set {'METd' if is_his_met else 'HISd'}  [atomselect top "resname {selection_patterns[ligand_key]} and resid {heme.ligand_distal}"]
+   set HEM   [atomselect top "resname {selection_patterns['hem']} and resid {heme.heme_id}"]""", file=self.file)
 
-        print("""
- mol new RefState.pdb""", file=open(VMDinput, 'w'))
+    def _write_residue_modifications(self, heme: HemeDefinition, prefixes: Dict[str, str], state: str):
+        """Write residue name modification commands"""
+        is_his_met = heme.ligation_type == LigationType.HIS_MET
+        ligand_key = 'met_d' if is_his_met else 'his_d'
+        ligand_type = "Met" if is_his_met else "His"
+        
+        print(f"""
+ #Change residue names for {state.lower()} state:
+   #The proximal His residue 
+     $HISp  set resname {prefixes['his_p']}; #Proximal His for {state.lower()} {ligand_type}-{ligand_type} ligated heme.
+   #The distal {ligand_type} residue
+     ${'METd' if is_his_met else 'HISd'}  set resname {prefixes[ligand_key]}; #Distal   {ligand_type} for {state.lower()} {ligand_type}-{ligand_type} ligated heme.
+   #The heme group
+     $HEM   set resname {prefixes['hem']}; #{heme.heme_type.value}-type {ligand_type}-{ligand_type} ligated {state.lower()} heme""", file=self.file)
 
+    def add_final_commands(self, output_prefix: str):
+        """Write commands to save the PDB file"""
+        print(f"""
+ set sel [atomselect top "all and not resname WAT 'Na+' 'Cl-'"]
+ $sel writepdb {output_prefix}.pdb
+ #-------------------------------------------------------------------------""", file=self.file)
+
+    def finalize(self):
+        """Write final exit command and close file"""
+        print("\nexit", file=self.file)
+        self.file.close()
+
+class TLeapScriptGenerator:
+    """Generates TLeap input scripts for topology generation"""
+    def __init__(self, ff_params: ForceFieldParameters):
+        self.ff_params = ff_params
+        self.defined_bonds: Set[Tuple[int, int]] = set()
+        # Track what we've written to avoid duplicates
+        self.written_atom_types: Set[Tuple[HemeType, LigationType, RedoxState]] = set()
+        self.written_ff_params: Set[Tuple[HemeType, LigationType, RedoxState]] = set()
+        
+    def generate_script(self, heme_pair: Tuple[HemeDefinition, HemeDefinition], output_file: str):
+        """Generate the complete TLeap script"""
+        try:
+            print(f"Opening {output_file} for writing...")
+            with open(output_file, 'w') as f:
+                print("Writing header...")
+                self._write_header(f)
+                print("Writing atom types...")
+                self._write_atom_types(f, heme_pair)
+                print("Writing forcefield loads...")
+                self._write_forcefield_loads(f, heme_pair)
+                print("Writing structure loads...")
+                self._write_structure_loads(f, heme_pair[0].heme_id, heme_pair[1].heme_id)
+                print("Writing disulfide bonds...")
+                self._write_disulfide_bonds(f)
+                print("Writing heme bonds...")
+                self._write_heme_bonds(f, heme_pair)
+                print("Writing footer...")
+                self._write_footer(f, heme_pair[0].heme_id, heme_pair[1].heme_id)
+        except Exception as e:
+            print(f"Failed to generate TLeap script: {str(e)}")
+            raise
+
+    def _write_header(self, f):
+        """Write the initial TLeap commands"""
         print("""
 # Load parameters
  source leaprc.constph
@@ -157,445 +299,52 @@ proceeding.""")
  source leaprc.gaff
  source leaprc.water.tip3p
 
- addAtomTypes {""", end=' ', file=open(TLEaPinput, 'w'))
+ addAtomTypes {""", file=f)
 
-#------------------------------------------------------------------------------
-# Identify each type of heme in the pair.
-#------------------------------------------------------------------------------
-        for m in range(len(ActiveIDs)):
-            if (Hi == int(ActiveIDs[m].strip().split(" ")[-3])):
-                HiLen = len(ActiveIDs[m].strip().split(" "))
-                HiType = ActiveIDs[m].strip().split(" ")[-2]
-                HiAxLigType = ActiveIDs[m].strip().split(" ")[-1]
-                print(f"****** HiAxLigType = {HiAxLigType}")
+    def _write_atom_types(self, f, heme_pair: Tuple[HemeDefinition, HemeDefinition]):
+        """Write atom type definitions based on heme types and their states"""
+        try:
+            print("Reading all heme types from SelResIndexing.txt...")
+            # First, get the unique heme types from SelResIndexing.txt
+            heme_types = set()
+            with open("SelResIndexing.txt") as fp:
+                for line in fp:
+                    parts = line.strip().split()
+                    heme_type = HemeType(parts[-2])
+                    ligation_type = LigationType(parts[-1])
+                    heme_types.add((heme_type, ligation_type))
+        
+            print(f"Found {len(heme_types)} unique heme type combinations")
+        
+            # Write atom types for all heme types in the structure
+            for heme_type, ligation_type in heme_types:
+                print(f"Processing {heme_type.value}-type {ligation_type.value} heme")
+                for redox_state in [RedoxState.OXIDIZED, RedoxState.REDUCED]:
+                    key = (heme_type, ligation_type, redox_state)
+                    if key not in self.written_atom_types:
+                        print(f"  Writing {redox_state.value} state atom types")
+                        if heme_type == HemeType.C:
+                            if ligation_type == LigationType.HIS_HIS:
+                                self._write_c_type_his_his_atoms(f, redox_state)
+                            else:
+                                self._write_c_type_his_met_atoms(f, redox_state)
+                        else:  # b-type
+                            if ligation_type == LigationType.HIS_HIS:
+                                self._write_b_type_his_his_atoms(f, redox_state)
+                            else:
+                                self._write_b_type_his_met_atoms(f, redox_state)
+                        self.written_atom_types.add(key)
+                    else:
+                        print(f"  Skipping {redox_state.value} state (already written)")
+        
+            print("\n }", file=f)
+        except Exception as e:
+            print(f"Error in _write_atom_types: {str(e)}")
+            raise
 
-                if ( HiLen == 8 ) and ( HiType == "c") and ( HiAxLigType == "HH" ):
-                    SelHemIType = "cHH"
-                    CYSb[0] = int(ActiveIDs[m].strip().split(" ")[0])
-                    CYSc[0] = int(ActiveIDs[m].strip().split(" ")[1])
-                    Ligp[0] = int(ActiveIDs[m].strip().split(" ")[2])
-                    Ligd[0] = int(ActiveIDs[m].strip().split(" ")[3])
-                elif ( HiLen == 8 ) and ( HiType == "c") and ( HiAxLigType == "HM" ):
-                    SelHemIType = "cHM"
-                    CYSb[0] = int(ActiveIDs[m].strip().split(" ")[0])
-                    CYSc[0] = int(ActiveIDs[m].strip().split(" ")[1])
-                    Ligp[0] = int(ActiveIDs[m].strip().split(" ")[2])
-                    Ligd[0] = int(ActiveIDs[m].strip().split(" ")[3])
-                elif ( HiLen == 6 ) and ( HiType == "b") and ( HiAxLigType == "HH" ):
-                    SelHemIType = "bHH"
-                    Ligp[0] = int(ActiveIDs[m].strip().split(" ")[0])
-                    Ligd[0] = int(ActiveIDs[m].strip().split(" ")[1])
-                elif ( HiLen == 6 ) and ( HiType == "b") and ( HiAxLigType == "HM" ):
-                    SelHemIType = "bHM"
-                    Ligp[0] = int(ActiveIDs[m].strip().split(" ")[0])
-                    Ligd[0] = int(ActiveIDs[m].strip().split(" ")[1])
-                else:
-                    sys.exit(f""" *** Missing entries on line number {m} of SelResIndexing.txt!""")
-
-            if (Hj == int(ActiveIDs[m].strip().split(" ")[-3])):
-                HjLen = len(ActiveIDs[m].strip().split(" "))
-                HjType = ActiveIDs[m].strip().split(" ")[-2]
-                HjAxLigType = ActiveIDs[m].strip().split(" ")[-1]
-                print(f"****** HjAxLigType = {HjAxLigType}")
-
-                if ( HjLen == 8 ) and ( HjType == "c") and ( HjAxLigType == "HH" ):
-                    SelHemJType = "cHH"
-                    CYSb[1] = int(ActiveIDs[m].strip().split(" ")[0])
-                    CYSc[1] = int(ActiveIDs[m].strip().split(" ")[1])
-                    Ligp[1] = int(ActiveIDs[m].strip().split(" ")[2])
-                    Ligd[1] = int(ActiveIDs[m].strip().split(" ")[3])
-                elif ( HjLen == 8 ) and ( HjType == "c") and ( HjAxLigType == "HM" ):
-                    SelHemJType = "cHM"
-                    CYSb[1] = int(ActiveIDs[m].strip().split(" ")[0])
-                    CYSc[1] = int(ActiveIDs[m].strip().split(" ")[1])
-                    Ligp[1] = int(ActiveIDs[m].strip().split(" ")[2])
-                    Ligd[1] = int(ActiveIDs[m].strip().split(" ")[3])
-                elif ( HjLen == 6 ) and ( HjType == "b") and ( HjAxLigType == "HH" ):
-                    SelHemJType = "bHH"
-                    Ligp[1] = int(ActiveIDs[m].strip().split(" ")[0])
-                    Ligd[1] = int(ActiveIDs[m].strip().split(" ")[1])
-                elif ( HjLen == 6 ) and ( HjType == "b") and ( HjAxLigType == "HM" ):
-                    SelHemJType = "bHM"
-                    Ligp[1] = int(ActiveIDs[m].strip().split(" ")[0])
-                    Ligd[1] = int(ActiveIDs[m].strip().split(" ")[1])
-                else:
-                    print(f" *** Missing entries on line number {m} of SelResIndexing.txt!")
-
-#------------------------------------------------------------------------------
-# For the selected heme pair, cycle through all the possible redox microstates
-# while all other hemes are left in the reference redox state, which was 
-# specified in DefineRefState.py
-#------------------------------------------------------------------------------
-        for k in ("o", "r"):
-            for l in ("o", "r"):
-
-#------------------------------------------------------------------------------
-# Each heme in the pair can be oxidized or reduced. 
-# These are either possibilities for each heme, and the residue names need to 
-# be changed accordingly.
-#   - oxidized c-type His-His ligated
-#   - reduced  c-type His-His ligated
-#   - oxidized c-type His-Met ligated
-#   - reduced  c-type His-Met ligated
-#   - oxidized b-type His-His ligated
-#   - reduced  b-type His-His ligated
-#   - oxidized b-type His-Met ligated
-#   - reduced  b-type His-Met ligated
-#------------------------------------------------------------------------------
-                if (k == "o") and (HiType == "c") and (HiAxLigType == "HH"):
-                    print(f"""
- #-------------------------------------------------------------------------
- #Oxidized Heme-{Hi}: His-His ligated c-type heme 
-
- #Define atom groups
-   set HISp  [atomselect top "resname PHO PHR and resid {Ligp[0]}"]
-   set HISd  [atomselect top "resname DHO DHR and resid {Ligd[0]}"]
-   set HEM   [atomselect top "resname HCO HCR and resid {Hi}"]
-
- #Change residue names for oxidized state:
-   #The proximal His residue 
-     $HISp  set resname PHO; #Proximal His for oxidized His-His ligated heme.
-   #The distal His residue
-     $HISd  set resname DHO; #Distal   His for oxidized His-His ligated heme.
-   #The heme group including the thioether linkages from Cys sidechains
-     $HEM   set resname HCO; #c-type His-His ligated oxidized heme""", file=open(VMDinput, 'a'))
-
-                if (k == "r") and (HiType == "c") and (HiAxLigType == "HH"):
-                    print(f"""
- #-------------------------------------------------------------------------
- #Reduced Heme-{Hi}: His-His ligated c-type heme  
-
- #Define atom groups
-   set HISp  [atomselect top "resname PHO PHR and resid {Ligp[0]}"]
-   set HISd  [atomselect top "resname DHO DHR and resid {Ligd[0]}"]
-   set HEM   [atomselect top "resname HCO HCR and resid {Hi}"]
-
- #Change residue names for reduced state:
-   #The proximal His residue 
-     $HISp  set resname PHR; #Proximal His for reduced  His-His ligated heme.
-   #The distal His residue
-     $HISd  set resname DHR; #Distal   His for reduced  His-His ligated heme.
-   #The heme group including the thioether linkages from Cys sidechains
-     $HEM   set resname HCR; #c-type His-His ligated reduced  heme""", file=open(VMDinput, 'a'))
-      
-                if (k == "o") and (HiType == "c") and (HiAxLigType == "HM"):
-                    print(f"""
- #-------------------------------------------------------------------------
- #Oxidized Heme-{Hi}: His-Met ligated c-type heme  
-
- #Define atom groups
-   set HISp  [atomselect top "resname PMO PMR and resid {Ligp[0]}"]
-   set METd  [atomselect top "resname DMO DMR and resid {Ligd[0]}"]
-   set HEM   [atomselect top "resname MCO MCR and resid {Hi}"]
-
- #Change residue names for oxidized state:
-   #The proximal His residue 
-     $HISp  set resname PMO; #Proximal His for oxidized His-Met ligated heme.
-   #The distal His residue
-     $METd  set resname DMO; #Distal   Met for oxidized His-Met ligated heme.
-   #The heme group including the thioether linkages from Cys sidechains
-     $HEM   set resname MCO; #c-type His-Met ligated oxidized heme""", file=open(VMDinput, 'a'))
-
-                if (k == "r") and (HiType == "c") and (HiAxLigType == "HM"):
-                    print(f"""
- #-------------------------------------------------------------------------
- #Reduced Heme-{Hi}: His-Met ligated c-type heme   
-
- #Define atom groups
-   set HISp  [atomselect top "resname PMO PMR and resid {Ligp[0]}"]
-   set METd  [atomselect top "resname DMO DMR and resid {Ligd[0]}"]
-   set HEM   [atomselect top "resname MCO MCR and resid {Hi}"]
-
- #Change residue names for oxidized state:
-   #The proximal His residue 
-     $HISp  set resname PMR; #Proximal His for oxidized His-Met ligated heme.
-   #The distal His residue
-     $METd  set resname DMR; #Distal   Met for oxidized His-Met ligated heme.
-   #The heme group including the thioether linkages from Cys sidechains
-     $HEM   set resname MCR; #c-type His-Met ligated oxidized heme""", file=open(VMDinput, 'a'))
-
-                if (k == "o") and (HiType == "b") and (HiAxLigType == "HH"):
-                    print(f"""
- #-------------------------------------------------------------------------
- #Oxidized Heme-{Hi}: His-His ligated b-type heme   
- 
- #Define atom groups
-   set HISp  [atomselect top "resname FHO FHR and resid {Ligp[0]}"]
-   set HISd  [atomselect top "resname RHO RHR and resid {Ligd[0]}"]
-   set HEM   [atomselect top "resname HBO HBR and resid {Hi}"]
-
- #Change residue names for oxidized state:
-   #The proximal His residue 
-     $HISp set resname FHO; #Proximal His for oxidized His-His ligated b-type heme.
-   #The distal His residue 
-     $HISd set resname RHO; #Distal   HIS for oxidized His-His ligated b-type heme.
-   #The heme group
-     $HEM  set resname HBO; #b-type His-His ligated oxidized heme""", file=open(VMDinput, 'a'))
-
-                if (k == "r") and (HiType == "b") and (HiAxLigType == "HH"):
-                    print(f"""
- #-------------------------------------------------------------------------
- #Reduced Heme-{Hi}: His-His ligated b-type heme    
- 
- #Define atom groups
-   set HISp  [atomselect top "resname FHO FHR and resid {Ligp[0]}"]
-   set HISd  [atomselect top "resname RHO RHR and resid {Ligd[0]}"]
-   set HEM   [atomselect top "resname HBO HBR and resid {Hi}"]
-
- #Change residue names for oxidized state:
-   #The proximal His residue 
-     $HISp set resname FHR; #Proximal His for oxidized His-His ligated b-type heme.
-   #The distal His residue 
-     $HISd set resname RHR; #Distal   HIS for oxidized His-His ligated b-type heme.
-   #The heme group
-     $HEM  set resname HBR; #b-type His-His ligated oxidized heme""", file=open(VMDinput, 'a'))
-    
-                if (k == "o") and (HiType == "b") and (HiAxLigType == "HM"):
-                    print(f"""
- #-------------------------------------------------------------------------
- #Oxidized Heme-{Hi}: His-Met ligated b-type heme    
-
- #Define atom groups
-   set HISp  [atomselect top "resname FMO FMR and resid {Ligp[0]}"]
-   set METd  [atomselect top "resname RMO RMR and resid {Ligd[0]}"]
-   set HEM   [atomselect top "resname MBO MBR and resid {Hi}"]
-
- #Change residue names for oxidized state:
-   #The proximal His residue 
-     $HISp set resname FMO; #Proximal His for oxidized His-Met ligated b-type heme.
-   #The distal His residue 
-     $METd set resname RMO; #Distal   Met for oxidized His-Met ligated b-type heme.
-   #The heme group
-     $HEM  set resname MBO; #b-type His-Met ligated oxidized heme""", file=open(VMDinput, 'a'))
-
-                if (k == "r") and (HiType == "b") and (HiAxLigType == "HM"):
-                    print(f"""
- #-------------------------------------------------------------------------
- #Reduced Heme-{Hi}: His-Met ligated b-type heme    
-
- #Define atom groups
-   set HISp  [atomselect top "resname FMO FMR and resid {Ligp[0]}"]
-   set METd  [atomselect top "resname RMO RMR and resid {Ligd[0]}"]
-   set HEM   [atomselect top "resname MBO MBR and resid {Hi}"]
-
- #Change residue names for reduced state:
-   #The proximal His residue 
-     $HISp set resname FMR; #Proximal His for reduced His-Met ligated b-type heme.
-   #The distal His residue 
-     $METd set resname RMR; #Distal   Met for reduced His-Met ligated b-type heme.
-   #The heme group
-     $HEM  set resname MBR; #b-type His-Met ligated reduced heme""", file=open(VMDinput, 'a'))
-
-                if (l == "o") and (HjType == "c") and (HjAxLigType == "HH"):
-                    print(f"""
- #Oxidized Heme-{Hj}: His-His ligated c-type heme    
-
- #Define atom groups
-   set HISp  [atomselect top "resname PHO PHR and resid {Ligp[1]}"]
-   set HISd  [atomselect top "resname DHO DHR and resid {Ligd[1]}"]
-   set HEM   [atomselect top "resname HCO HCR and resid {Hj}"]
-
- #Change residue names for oxidized state:
-   #The proximal His residue 
-     $HISp  set resname PHO; #Proximal His for oxidized His-His ligated heme.
-   #The distal His residue
-     $HISd  set resname DHO; #Distal   His for oxidized His-His ligated heme.
-   #The heme group including the thioether linkages from Cys sidechains
-     $HEM   set resname HCO; #c-type His-His ligated oxidized heme""", file=open(VMDinput, 'a'))
-
-                if (l == "r") and (HjType == "c") and (HjAxLigType == "HH"):
-                    print(f"""
- #Reduced Heme-{Hj}: His-His ligated c-type heme     
-
- #Define atom groups
-   set HISp  [atomselect top "resname PHO PHR and resid {Ligp[1]}"]
-   set HISd  [atomselect top "resname DHO DHR and resid {Ligd[1]}"]
-   set HEM   [atomselect top "resname HCO HCR and resid {Hj}"]
-
- #Change residue names for reduced state:
-   #The proximal His residue 
-     $HISp  set resname PHR; #Proximal His for reduced His-His ligated heme.
-   #The distal His residue
-     $HISd  set resname DHR; #Distal   His for reduced His-His ligated heme.
-   #The heme group including the thioether linkages from Cys sidechains
-     $HEM   set resname HCR; #c-type His-His ligated reduced heme""", file=open(VMDinput, 'a'))
-      
-                if (l == "o") and (HjType == "c") and (HjAxLigType == "HM"):
-                    print(f"""
- #Oxidized Heme-{Hj}: His-Met ligated c-type heme     
-
- #Define atom groups
-   set HISp  [atomselect top "resname PMO PMR and resid {Ligp[1]}"]
-   set METd  [atomselect top "resname DMO DMR and resid {Ligd[1]}"]
-   set HEM   [atomselect top "resname MCO MCR and resid {Hj}"]
-
- #Change residue names for oxidized state:
-   #The proximal His residue 
-     $HISp  set resname PMO; #Proximal His for oxidized His-Met ligated heme.
-   #The distal His residue
-     $METd  set resname DMO; #Distal   Met for oxidized His-Met ligated heme.
-   #The heme group including the thioether linkages from Cys sidechains
-     $HEM   set resname MCO; #c-type His-Met ligated oxidized heme""", file=open(VMDinput, 'a'))
-
-                if (l == "r") and (HjType == "c") and (HjAxLigType == "HM"):
-                    print(f"""
- #Reduced Heme-{Hj}: His-Met ligated c-type heme     
-
- #Define atom groups
-   set HISp  [atomselect top "resname PMO PMR and resid {Ligp[1]}"]
-   set METd  [atomselect top "resname DMO DMR and resid {Ligd[1]}"]
-   set HEM   [atomselect top "resname MCO MCR and resid {Hj}"]
-
- #Change residue names for reduced state:
-   #The proximal His residue 
-     $HISp  set resname PMR; #Proximal His for reduced His-Met ligated heme.
-   #The distal His residue
-     $METd  set resname DMR; #Distal   Met for reduced His-Met ligated heme.
-   #The heme group including the thioether linkages from Cys sidechains
-     $HEM   set resname MCR; #c-type His-Met ligated reduced heme""", file=open(VMDinput, 'a'))
-
-                if (l == "o") and (HjType == "b") and (HjAxLigType == "HH"):
-                    print(f"""
- #Oxidized Heme-{Hj}: His-His ligated b-type heme      
- 
- #Define atom groups
-   set HISp  [atomselect top "resname FHO FHR and resid {Ligp[1]}"]
-   set HISd  [atomselect top "resname RHO RHR and resid {Ligd[1]}"]
-   set HEM   [atomselect top "resname HBO HBR and resid {Hj}"]
-
- #Change residue names for oxidized state:
-   #The proximal His residue 
-     $HISp set resname FHO; #Proximal His for oxidized His-His ligated b-type heme.
-   #The distal His residue 
-     $HISd set resname RHO; #Distal   HIS for oxidized His-His ligated b-type heme.
-   #The heme group
-     $HEM  set resname HBO; #b-type His-His ligated oxidized heme""", file=open(VMDinput, 'a'))
-
-                if (l == "r") and (HjType == "b") and (HjAxLigType == "HH"):
-                    print(f"""
- #Reduced Heme-{Hj}: His-His ligated b-type heme      
- 
- #Define atom groups
-   set HISp  [atomselect top "resname FHO FHR and resid {Ligp[1]}"]
-   set HISd  [atomselect top "resname RHO RHR and resid {Ligd[1]}"]
-   set HEM   [atomselect top "resname HBO HBR and resid {Hj}"]
-
- #Change residue names for reduced state:
-   #The proximal His residue 
-     $HISp set resname FHR; #Proximal His for reduced His-His ligated b-type heme.
-   #The distal His residue 
-     $HISd set resname RHR; #Distal   HIS for reduced His-His ligated b-type heme.
-   #The heme group
-     $HEM  set resname HBR; #b-type His-His ligated reduced heme""", file=open(VMDinput, 'a'))
-    
-                if (l == "o") and (HjType == "b") and (HjAxLigType == "HM"):
-                    print(f"""
- #Oxidized Heme-{Hj}: His-Met ligated b-type heme      
-
- #Define atom groups
-   set HISp  [atomselect top "resname FMO FMR and resid {Ligp[1]}"]
-   set METd  [atomselect top "resname RMO RMR and resid {Ligd[1]}"]
-   set HEM   [atomselect top "resname MBO MBR and resid {Hj}"]
-
- #Change residue names for oxidized state:
-   #The proximal His residue 
-     $HISp set resname FMO; #Proximal His for oxidized His-Met ligated b-type heme.
-   #The distal His residue 
-     $METd set resname RMO; #Distal   Met for oxidized His-Met ligated b-type heme.
-   #The heme group
-     $HEM  set resname MBO; #b-type His-Met ligated oxidized heme""", file=open(VMDinput, 'a'))
-
-                if (l == "r") and (HjType == "b") and (HjAxLigType == "HM"):
-                    print(f"""
- #-------------------------------------------------------------------------
- #Reduced Heme-{Hj}: His-Met ligated b-type heme       
-
- #Define atom groups
-   set HISp  [atomselect top "resname FMO FMR and resid {Ligp[1]}"]
-   set METd  [atomselect top "resname RMO RMR and resid {Ligd[1]}"]
-   set HEM   [atomselect top "resname MBO MBR and resid {Hj}"]
-
- #Change residue names for reduced state:
-   #The proximal His residue 
-     $HISp set resname FMR; #Proximal His for reduced His-Met ligated b-type heme.
-   #The distal His residue 
-     $METd set resname RMR; #Distal   Met for reduced His-Met ligated b-type heme.
-   #The heme group
-     $HEM  set resname MBR; #b-type His-Met ligated reduced heme""", file=open(VMDinput, 'a'))
-
-                print(f"""
- set sel [atomselect top "all and not resname WAT 'Na+' 'Cl-'"]
- $sel writepdb temp_{k}{Hi}-{l}{Hj}.pdb
- #-------------------------------------------------------------------------""", file=open(VMDinput, 'a'))
-
-        print(f""" \n exit """, file=open(VMDinput, 'a'))
-
-        print(f"""
- Using VMD to generate redox microstate PDBs for Heme-{Hi} and Heme-{Hj}... """)
-        subprocess.run(f"vmd -e PairInt_{Hi}-{Hj}.tcl > PairInt_{Hi}-{Hj}.log", shell=True)
-
-        chk=0
-        for k in ("o", "r"):
-            for l in ("o", "r"):
-                if (os.path.isfile(f"temp_{k}{Hi}-{l}{Hj}.pdb") == True):
-                    print(f"  VMD successfully generated temp_{k}{Hi}-{l}{Hj}.pdb")
-                    insert_ter_records(f"temp_{k}{Hi}-{l}{Hj}.pdb", f"{k}{Hi}-{l}{Hj}.pdb")
-                    print(f"  Added TER records to generated PDB: {k}{Hi}-{l}{Hj}.pdb")
-                    if (os.path.isfile(f"{k}{Hi}-{l}{Hj}.pdb") == True):
-                        os.remove(f"temp_{k}{Hi}-{l}{Hj}.pdb")
-                        print(f"  Deleted temporary PDB: temp_{k}{Hi}-{l}{Hj}.pdb")
-                        print(f"""  √ {k}{Hi} -- {l}{Hj}: VMD finished successfully!""")
-                if (os.path.isfile(f"{k}{Hi}-{l}{Hj}.pdb") == False):
-                    chk+=1
-                    print(f"""
-   X temp_{k}{Hi} -- {l}{Hj}: VMD failed. 
-   Please check PairInt_{Hi}-{Hj}.log.""")
-    
-        if (chk != 0):
-            sys.exit(f"""
- VMD failed to generate the PDB for one or more redox microstates. 
- Please inspect PairInt_{Hi}-{Hj}.log before re-running this module \n""")
-
-#------------------------------------------------------------------------------
-# Now create the rest of the TLEaP input file, making sure only to specify 
-# atom types and forcefield files if one or more hemes in the structure is 
-# of that type, but not to specify multiple types of those entires.
-#------------------------------------------------------------------------------
-        if (HiType == "c" and HiAxLigType == "HH") or (HjType == "c" and HiAxLigType == "HH"):
-            print("""
-        { "M7"  "Fe" "sp3" } #M7&S1-S6:
-        { "S1"  "N" "sp3" }  #Oxidized
-        { "S2"  "N" "sp3" }  #His-His
-        { "S3"  "N" "sp3" }  #Ligated
-        { "S4"  "N" "sp3" }  #c-Heme
-        { "S5"  "N" "sp3" }
-        { "S6"  "N" "sp3" }
-        { "M8"  "Fe" "sp3" } #M8&T1-T6:
-        { "T1"  "N" "sp3" }  #Reduced
-        { "T2"  "N" "sp3" }  #His-His
-        { "T3"  "N" "sp3" }  #Ligated
-        { "T4"  "N" "sp3" }  #c-Heme
-        { "T5"  "N" "sp3" }
-        { "T6"  "N" "sp3" }""", end=" ", file=open(TLEaPinput, 'a'))
-
-        if (HiType == "c" and HiAxLigType == "HM") or (HjType == "c" and HiAxLigType == "HM"):
-            print("""
-        { "M5"  "Fe" "sp3" } #M5&U1-U6:
-        { "U1"  "N" "sp3" }  #Oxidized
-        { "U2"  "S" "sp3" }  #His-Met
-        { "U3"  "N" "sp3" }  #Ligated
-        { "U4"  "N" "sp3" }  #c-Heme
-        { "U5"  "N" "sp3" }
-        { "U6"  "N" "sp3" }
-        { "M6"  "Fe" "sp3" } #M6&V1-V6:
-        { "V1"  "N" "sp3" }  #Reduced
-        { "V2"  "S" "sp3" }  #His-Met
-        { "V3"  "N" "sp3" }  #Ligated
-        { "V4"  "N" "sp3" }  #c-Heme
-        { "V5"  "N" "sp3" }
-        { "V6"  "N" "sp3" }""", end=" ", file=open(TLEaPinput, 'a'))
-
-        if (HiType == "b" and HiAxLigType == "HH") or (HjType == "b" and HiAxLigType == "HH"):
+    def _write_b_type_his_his_atoms(self, f, redox_state: RedoxState):
+        """Write atom types for b-type His-His ligated heme"""
+        if redox_state == RedoxState.OXIDIZED:
             print("""
         { "M1"  "Fe" "sp3" } #M1&Y1-Y6:
         { "Y1"  "N" "sp3" }  #Oxidized
@@ -603,42 +352,8 @@ proceeding.""")
         { "Y3"  "N" "sp3" }  #Ligated
         { "Y4"  "N" "sp3" }  #b-Heme
         { "Y5"  "N" "sp3" }
-        { "Y6"  "N" "sp3" }
-        { "M2"  "Fe" "sp3" } #M2&Z1-Z6:
-        { "Z1"  "N" "sp3" }  #Reduced
-        { "Z2"  "N" "sp3" }  #His-His
-        { "Z3"  "N" "sp3" }  #Ligated
-        { "Z4"  "N" "sp3" }  #b-Heme
-        { "Z5"  "N" "sp3" }
-        { "Z6"  "N" "sp3" }""", end=" ", file=open(TLEaPinput, 'a'))
-
-        if (HiType == "b" and HiAxLigType == "HM") or (HjType == "b" and HjAxLigType == "HM"):
-            print("""
-        { "M3"  "Fe" "sp3" } #M3&W1-W6:
-        { "W1"  "S" "sp3" }  #Oxidized
-        { "W2"  "N" "sp3" }  #His-Met
-        { "W3"  "N" "sp3" }  #Ligated
-        { "W4"  "N" "sp3" }  #b-Heme
-        { "W5"  "N" "sp3" }
-        { "W6"  "N" "sp3" }
-        { "M4"  "Fe" "sp3" } #M4&X1-X6:
-        { "X1"  "S" "sp3" }  #Reduced
-        { "X2"  "N" "sp3" }  #His-Met
-        { "X3"  "N" "sp3" }  #Ligated
-        { "X4"  "N" "sp3" }  #b-Heme
-        { "X5"  "N" "sp3" }
-        { "X6"  "N" "sp3" }""", end=" ", file=open(TLEaPinput, 'a'))
-
-        if (SelRefRedoxState == "O" and Count_b_HH != 0 and SelHemIType != "bHH") or (SelRefRedoxState == "O" and Count_b_HH != 0 and SelHemJType != "bHH"):
-            print("""
-        { "M1"  "Fe" "sp3" } #M1&Y1-Y6:
-        { "Y1"  "N" "sp3" }  #Oxidized
-        { "Y2"  "N" "sp3" }  #His-His
-        { "Y3"  "N" "sp3" }  #Ligated
-        { "Y4"  "N" "sp3" }  #b-Heme
-        { "Y5"  "N" "sp3" }
-        { "Y6"  "N" "sp3" }""", end=" ", file=open(TLEaPinput, 'a'))
-        if (SelRefRedoxState == "R" and Count_b_HH != 0 and SelHemIType != "bHH") or (SelRefRedoxState == "R" and Count_b_HH != 0 and SelHemJType != "bHH"):
+        { "Y6"  "N" "sp3" }""", end=" ", file=f)
+        else:  # REDUCED
             print("""
         { "M2"  "Fe" "sp3" } #M2&Z1-Z6:
         { "Z1"  "N" "sp3" }  #Reduced
@@ -646,9 +361,11 @@ proceeding.""")
         { "Z3"  "N" "sp3" }  #Ligated
         { "Z4"  "N" "sp3" }  #b-Heme
         { "Z5"  "N" "sp3" }
-        { "Z6"  "N" "sp3" }""", end=" ", file=open(TLEaPinput, 'a'))
+        { "Z6"  "N" "sp3" }""", end=" ", file=f)
 
-        if (SelRefRedoxState == "O" and Count_b_HM != 0 and SelHemIType != "bHM") or (SelRefRedoxState == "O" and Count_b_HM != 0 and SelHemJType != "bHM"):
+    def _write_b_type_his_met_atoms(self, f, redox_state: RedoxState):
+        """Write atom types for b-type His-Met ligated heme"""
+        if redox_state == RedoxState.OXIDIZED:
             print("""
         { "M3"  "Fe" "sp3" } #M3&W1-W6:
         { "W1"  "S" "sp3" }  #Oxidized
@@ -656,8 +373,8 @@ proceeding.""")
         { "W3"  "N" "sp3" }  #Ligated
         { "W4"  "N" "sp3" }  #b-Heme
         { "W5"  "N" "sp3" }
-        { "W6"  "N" "sp3" }""", end=" ", file=open(TLEaPinput, 'a'))
-        if (SelRefRedoxState == "R" and Count_b_HM != 0 and SelHemIType != "bHM") or (SelRefRedoxState == "R" and Count_b_HM != 0 and SelHemJType != "bHM"):
+        { "W6"  "N" "sp3" }""", end=" ", file=f)
+        else:  # REDUCED
             print("""
         { "M4"  "Fe" "sp3" } #M4&X1-X6:
         { "X1"  "S" "sp3" }  #Reduced
@@ -665,28 +382,11 @@ proceeding.""")
         { "X3"  "N" "sp3" }  #Ligated
         { "X4"  "N" "sp3" }  #b-Heme
         { "X5"  "N" "sp3" }
-        { "X6"  "N" "sp3" }""", end=" ", file=open(TLEaPinput, 'a'))
+        { "X6"  "N" "sp3" }""", end=" ", file=f)
 
-        if (SelRefRedoxState == "O" and Count_c_HM != 0 and SelHemIType != "cHM") or (SelRefRedoxState == "O" and Count_c_HM != 0 and SelHemJType != "cHM"):
-            print("""
-        { "M5"  "Fe" "sp3" } #M5&U1-U6:
-        { "U1"  "N" "sp3" }  #Oxidized
-        { "U2"  "S" "sp3" }  #His-Met
-        { "U3"  "N" "sp3" }  #Ligated
-        { "U4"  "N" "sp3" }  #c-Heme
-        { "U5"  "N" "sp3" }
-        { "U6"  "N" "sp3" }""", end=" ", file=open(TLEaPinput, 'a'))
-        if (SelRefRedoxState == "R" and Count_c_HM != 0 and SelHemIType != "cHM") or (SelRefRedoxState == "R" and Count_c_HM != 0 and SelHemJType != "cHM"):
-            print("""
-        { "M6"  "Fe" "sp3" } #M6&V1-V6:
-        { "V1"  "N" "sp3" }  #Reduced
-        { "V2"  "S" "sp3" }  #His-Met
-        { "V3"  "N" "sp3" }  #Ligated
-        { "V4"  "N" "sp3" }  #c-Heme
-        { "V5"  "N" "sp3" }
-        { "V6"  "N" "sp3" }""", end=" ", file=open(TLEaPinput, 'a'))
-
-        if (SelRefRedoxState == "O" and Count_c_HH != 0 and SelHemIType != "cHH") or (SelRefRedoxState == "O" and Count_c_HH != 0 and SelHemJType != "cHH"):
+    def _write_c_type_his_his_atoms(self, f, redox_state: RedoxState):
+        """Write atom types for c-type His-His ligated heme"""
+        if redox_state == RedoxState.OXIDIZED:
             print("""
         { "M7"  "Fe" "sp3" } #M7&S1-S6:
         { "S1"  "N" "sp3" }  #Oxidized
@@ -694,8 +394,8 @@ proceeding.""")
         { "S3"  "N" "sp3" }  #Ligated
         { "S4"  "N" "sp3" }  #c-Heme
         { "S5"  "N" "sp3" }
-        { "S6"  "N" "sp3" }""", end=" ", file=open(TLEaPinput, 'a'))
-        if (SelRefRedoxState == "R" and Count_c_HH != 0 and SelHemIType != "cHH") or (SelRefRedoxState == "R" and Count_c_HH != 0 and SelHemJType != "cHH"):
+        { "S6"  "N" "sp3" }""", end=" ", file=f)
+        else:  # REDUCED
             print("""
         { "M8"  "Fe" "sp3" } #M8&T1-T6:
         { "T1"  "N" "sp3" }  #Reduced
@@ -703,304 +403,367 @@ proceeding.""")
         { "T3"  "N" "sp3" }  #Ligated
         { "T4"  "N" "sp3" }  #c-Heme
         { "T5"  "N" "sp3" }
-        { "T6"  "N" "sp3" }""", end=" ", file=open(TLEaPinput, 'a'))
+        { "T6"  "N" "sp3" }""", end=" ", file=f)
 
-        print("""\n } """, file=open(TLEaPinput, 'a'))
-
-        if ( Count_b_HH != 0 ) or ( Count_b_HM != 0 ):
+    def _write_c_type_his_met_atoms(self, f, redox_state: RedoxState):
+        """Write atom types for c-type His-Met ligated heme"""
+        if redox_state == RedoxState.OXIDIZED:
             print("""
-# References for b-type heme forcefield parameters:
-#    Bonded parameters for the macrocycle come from:
-#      Yang, Longhua, Åge A. Skjevik, Wen-Ge Han Du, Louis Noodleman, Ross C. Walker, and Andreas W. Götz.
-#      Data for molecular dynamics simulations of B-type cytochrome c oxidase with the Amber force field.
-#      Data in brief 8 (2016): 1209-1214.
-#
-#    Bonded parameters for the Fe center and atomic partial charges were derived by Guberman-Pfeffer 
-#    using the Metal Center Parameter Builder. The B3LYP approximate density functional was used with 
-#    the z mixed basis set (LANL2TZ(f) for Fe and 6-31G(d) for 2nd row elements. 
-#
-#    A different set of charges is available in the literature (below reference), but only for the 
-#    oxidized redox state. Also, in the developmenet of BioDC, Guberman-Pfeffer liked the idea of
-#    having a consistently-derived set of parameters for b- and c-type hemes with His-His and 
-#    His-Met ligation.
-#
-#    Alternative set of charges are available at:
-#      L.Noodleman et al. Inorg. Chem., 53 (2014)
-#      6458;
-#      J.A.Fee et al. J.Am.Chem.Soc., 130 (2008) 15002. 
-""", end=" ", file=open(TLEaPinput, 'a'))
-
-        if (HiType == "b" and HiAxLigType == "HH") or (HjType == "b" and HiAxLigType == "HH"):
-            print(f"""
- loadamberparams {ForceFieldDir}/Oxidized_HisHisLigated_b-heme.frcmod
- loadoff {ForceFieldDir}/Oxidized_HisHisLigated_b-heme_RESP.lib
- loadamberparams {ForceFieldDir}/Reduced_HisHisLigated_b-heme.frcmod
- loadoff {ForceFieldDir}/Reduced_HisHisLigated_b-heme_RESP.lib""", file=open(TLEaPinput, 'a'))
-        if (HiType == "b" and HiAxLigType == "HM") or (HjType == "b" and HiAxLigType == "HM"):
-            print(f"""
- loadamberparams {ForceFieldDir}/Oxidized_HisMetLigated_b-heme.frcmod
- loadoff {ForceFieldDir}/Oxidized_HisMetLigated_b-heme_RESP.lib
- loadamberparams {ForceFieldDir}/Reduced_HisMetLigated_b-heme.frcmod
- loadoff {ForceFieldDir}/Reduced_HisMetLigated_b-heme_RESP.lib""", file=open(TLEaPinput, 'a'))
-
-        if (SelRefRedoxState == "O" and Count_b_HH != 0 and SelHemIType != "bHH") or (SelRefRedoxState == "O" and Count_b_HH != 0 and SelHemJType != "bHH"):
-            print(f"""
- loadamberparams {ForceFieldDir}/Oxidized_HisHisLigated_b-heme.frcmod
- loadoff {ForceFieldDir}/Oxidized_HisHisLigated_b-heme_RESP.lib""", end=" ", file=open(TLEaPinput, 'a'))
-        if (SelRefRedoxState == "R" and Count_b_HH != 0 and SelHemIType != "bHH") or (SelRefRedoxState == "R" and Count_b_HH != 0 and SelHemJType != "bHH"):
-            print(f"""
- loadamberparams {ForceFieldDir}/Reduced_HisHisLigated_b-heme.frcmod
- loadoff {ForceFieldDir}/Reduced_HisHisLigated_b-heme_RESP.lib""", end=" ", file=open(TLEaPinput, 'a'))
-        if (SelRefRedoxState == "O" and Count_b_HM != 0 and SelHemIType != "bHM") or (SelRefRedoxState == "O" and Count_b_HM != 0 and SelHemJType != "bHM"):
-            print(f"""
- loadamberparams {ForceFieldDir}/Oxidized_HisMetLigated_b-heme.frcmod
- loadoff {ForceFieldDir}/Oxidized_HisMetLigated_b-heme_RESP.lib""", end=" ", file=open(TLEaPinput, 'a'))
-        if (SelRefRedoxState == "R" and Count_b_HM != 0 and SelHemIType != "bHM") or (SelRefRedoxState == "R" and Count_b_HM != 0 and SelHemJType != "bHM"):
-            print(f"""
- loadamberparams {ForceFieldDir}/Reduced_HisMetLigated_b-heme.frcmod
- loadoff {ForceFieldDir}/Reduced_HisMetLigated_b-heme_RESP.lib""", end=" ", file=open(TLEaPinput, 'a'))
-
-        if ( Count_c_HH != 0 ) or ( Count_c_HM != 0 ):
+        { "M5"  "Fe" "sp3" } #M5&U1-U6:
+        { "U1"  "N" "sp3" }  #Oxidized
+        { "U2"  "S" "sp3" }  #His-Met
+        { "U3"  "N" "sp3" }  #Ligated
+        { "U4"  "N" "sp3" }  #c-Heme
+        { "U5"  "N" "sp3" }
+        { "U6"  "N" "sp3" }""", end=" ", file=f)
+        else:  # REDUCED
             print("""
-# References for c-type heme forcefield parameters:
-#    Bonded parameters for the macrocycle come from:
-#      Crespo, A.; Martí, M. A.; Kalko, S. G.; Morreale, A.; Orozco, M.; Gelpi, J. L.; Luque, F. J.; 
-#      Estrin, D. A. Theoretical Study of the Truncated Hemoglobin HbN: Exploring the Molecular Basis 
-#      of the NO Detoxification Mechanism. J. Am. Chem. Soc. 2005, 127 (12), 4433–4444.
-#
-#    Bonded parameters for the Fe center and atomic partial charges were derived by Guberman-Pfeffer 
-#    using the Metal Center Parameter Builder. The B3LYP approximate density functional was used with 
-#    the z mixed basis set (LANL2TZ(f) for Fe and 6-31G(d) for 2nd row elements. 
-#
-#    A different set of charges is available in the literature (below reference), but in the 
-#    developmenet of BioDC, Guberman-Pfeffer liked the idea of having a consistently-derived 
-#    set of parameters for b- and c-type hemes with His-His and His-Met ligation.
-#
-#    Alternative set of charges are available at:
-#      Henriques, J.; Costa, P. J.; Calhorda, M. J.; Machuqueiro, M. Charge Parametrization 
-#      of the DvH-c3 Heme Group: Validation Using Constant-(pH,E) Molecular Dynamics 
-#      Simulations. J. Phys. Chem. B 2013, 117 (1), 70–82.
-""", end=" ", file=open(TLEaPinput, 'a'))
+        { "M6"  "Fe" "sp3" } #M6&V1-V6:
+        { "V1"  "N" "sp3" }  #Reduced
+        { "V2"  "S" "sp3" }  #His-Met
+        { "V3"  "N" "sp3" }  #Ligated
+        { "V4"  "N" "sp3" }  #c-Heme
+        { "V5"  "N" "sp3" }
+        { "V6"  "N" "sp3" }""", end=" ", file=f)
 
-        if (HiType == "c" and HiAxLigType == "HH") or (HjType == "c" and HiAxLigType == "HH"):
-            if (FFchoice.lower() in ["henriques", "h"]):
-                print(f"""
- loadamberparams {ForceFieldDir}/Oxidized_HisHisLigated_c-heme.frcmod
- loadoff {ForceFieldDir}/Henriques_Oxidized_HisHisLigated_c-heme_RESP.lib
- loadamberparams {ForceFieldDir}/Reduced_HisHisLigated_c-heme.frcmod
- loadoff {ForceFieldDir}/Henriques_Reduced_HisHisLigated_c-heme_RESP.lib""", file=open(TLEaPinput, 'a'))
-            elif (FFchoice.lower() in ["guberman-pfeffer", "gp"]):
-                print(f"""
- loadamberparams {ForceFieldDir}/Oxidized_HisHisLigated_c-heme.frcmod
- loadoff {ForceFieldDir}/Oxidized_HisHisLigated_c-heme_RESP.lib
- loadamberparams {ForceFieldDir}/Reduced_HisHisLigated_c-heme.frcmod
- loadoff {ForceFieldDir}/Reduced_HisHisLigated_c-heme_RESP.lib""", file=open(TLEaPinput, 'a'))
-        if (HiType == "c" and HiAxLigType == "HM") or (HjType == "c" and HiAxLigType == "HM"):
-            print(f"""
- loadamberparams {ForceFieldDir}/Oxidized_HisMetLigated_c-heme.frcmod
- loadoff {ForceFieldDir}/Oxidized_HisMetLigated_c-heme_RESP.lib
- loadamberparams {ForceFieldDir}/Reduced_HisMetLigated_c-heme.frcmod
- loadoff {ForceFieldDir}/Reduced_HisMetLigated_c-heme_RESP.lib""", file=open(TLEaPinput, 'a'))
+    def _write_forcefield_loads(self, f, heme_pair: Tuple[HemeDefinition, HemeDefinition]):
+        """Write force field loading commands for all heme types"""
+        # Get unique heme types from SelResIndexing.txt
+        heme_types = set()
+        with open("SelResIndexing.txt") as fp:
+            for line in fp:
+                parts = line.strip().split()
+                heme_type = HemeType(parts[-2])
+                ligation_type = LigationType(parts[-1])
+                heme_types.add((heme_type, ligation_type))
 
-        if (SelRefRedoxState == "O" and Count_c_HM != 0 and SelHemIType != "cHM") or (SelRefRedoxState == "O" and Count_c_HM != 0 and SelHemJType != "cHM"):
-            print(f"""
- loadamberparams {ForceFieldDir}/Oxidized_HisMetLigated_c-heme.frcmod
- loadoff {ForceFieldDir}/Oxidized_HisMetLigated_c-heme_RESP.lib""", end=" ", file=open(TLEaPinput, 'a'))
-        if (SelRefRedoxState == "R" and Count_c_HM != 0 and SelHemIType != "cHM") or (SelRefRedoxState == "R" and Count_c_HM != 0 and SelHemJType != "cHM"):
-            print(f"""
- loadamberparams {ForceFieldDir}/Reduced_HisMetLigated_c-heme.frcmod
- loadoff {ForceFieldDir}/Reduced_HisMetLigated_c-heme_RESP.lib""", end=" ", file=open(TLEaPinput, 'a'))
+        # Load force field parameters for all heme types
+        for heme_type, ligation_type in heme_types:
+            for redox_state in [RedoxState.OXIDIZED, RedoxState.REDUCED]:
+                key = (heme_type, ligation_type, redox_state)
+                if key not in self.written_ff_params:
+                    lib_name = self.ff_params.get_lib_name(heme_type, ligation_type, redox_state)
+                    frcmod_name = self.ff_params.get_frcmod_name(heme_type, ligation_type, redox_state)
+                
+                    print(f"""
+ loadamberparams {self.ff_params.dir}/{frcmod_name}
+ loadoff {self.ff_params.dir}/{lib_name}""", file=f)
+                    self.written_ff_params.add(key)
 
-        if (SelRefRedoxState == "O" and Count_c_HH != 0 and SelHemIType != "cHH") or (SelRefRedoxState == "O" and Count_c_HH != 0 and SelHemJType != "cHH"):
-            if (FFchoice.lower() in ["henriques", "h"]):
-                print(f"""
- loadamberparams {ForceFieldDir}/Oxidized_HisHisLigated_c-heme.frcmod
- loadoff {ForceFieldDir}/Henriques_Oxidized_HisHisLigated_c-heme_RESP.lib""", end=" ", file=open(TLEaPinput, 'a'))
-            elif (FFchoice.lower() in ["guberman-pfeffer", "gp"]):
-                print(f"""
- loadamberparams {ForceFieldDir}/Oxidized_HisHisLigated_c-heme.frcmod
- loadoff {ForceFieldDir}/Oxidized_HisHisLigated_c-heme_RESP.lib""", end=" ", file=open(TLEaPinput, 'a'))
-        if (SelRefRedoxState == "R" and Count_c_HH != 0 and SelHemIType != "cHH") or (SelRefRedoxState == "R" and Count_c_HH != 0 and SelHemJType != "cHH"):
-            if (FFchoice.lower() in ["henriques", "h"]):
-                print(f"""
- loadamberparams {ForceFieldDir}/Reduced_HisHisLigated_c-heme.frcmod
- loadoff {ForceFieldDir}/Henriques_Reduced_HisHisLigated_c-heme_RESP.lib""", end=" ", file=open(TLEaPinput, 'a'))
-            elif (FFchoice.lower() in ["guberman-pfeffer", "gp"]):
-                print(f"""
- loadamberparams {ForceFieldDir}/Reduced_HisHisLigated_c-heme.frcmod
- loadoff {ForceFieldDir}/Reduced_HisHisLigated_c-heme_RESP.lib""", end=" ", file=open(TLEaPinput, 'a'))
-
+    def _write_structure_loads(self, f, heme1_id: int, heme2_id: int):
+        """Write structure loading commands"""
         print(f"""
-# Load PDB
-  oo = loadpdb o{Hi}-o{Hj}.pdb
-  or = loadpdb o{Hi}-r{Hj}.pdb
-  ro = loadpdb r{Hi}-o{Hj}.pdb
-  rr = loadpdb r{Hi}-r{Hj}.pdb""", file=open(TLEaPinput, 'a'))
+# Load PDB files
+ oo = loadpdb o{heme1_id}-o{heme2_id}.pdb
+ or = loadpdb o{heme1_id}-r{heme2_id}.pdb
+ ro = loadpdb r{heme1_id}-o{heme2_id}.pdb
+ rr = loadpdb r{heme1_id}-r{heme2_id}.pdb""", file=f)
 
-#------------------------------------------------------------------------------
-# Specify the disulfide linkages. The residue IDs for each pair are read from 
-# DisulfideDefinitions.txt, which was created by SelectDisulfides.py 
-#------------------------------------------------------------------------------
-        if (os.path.isfile("DisulfideDefinitions.txt") == True):
-            with open("DisulfideDefinitions.txt") as dsl:
-                NumDisulfide = int(len(dsl.readlines()))
-                DisulfPairID = [0]*NumDisulfide
-                dsl.seek(0)
+    def _write_disulfide_bonds(self, f):
+        """Write disulfide bond definitions if present"""
+        if not os.path.isfile("DisulfideDefinitions.txt"):
+            return
+            
+        with open("DisulfideDefinitions.txt") as dsl:
+            disulfide_pairs = [list(map(int, line.split())) for line in dsl]
+            
+        if disulfide_pairs:
+            print("\n# Define Disulfide linkages", file=f)
+            for pair in disulfide_pairs:
+                for prefix in ['oo', 'or', 'ro', 'rr']:
+                    print(f" bond {prefix}.{pair[0]}.SG {prefix}.{pair[1]}.SG", file=f)
 
-                idx=0
-                Lines_dsl = dsl.readlines()
-                for line in Lines_dsl:
-                    SelPairIDs = line
-                    DisulfPairID[idx] = list(map(int,SelPairIDs.split()))
-                    idx+=1
+    def _write_heme_bonds(self, f, heme_pair: Tuple[HemeDefinition, HemeDefinition]):
+        """Write all heme-related bond definitions"""
+        for heme in heme_pair:
+            self._write_single_heme_bonds(f, heme)
 
-            if (len(DisulfPairID) != 0):
-                print("# Define Disulfide linkages ")
-                for sbi in range(len(DisulfPairID)):
-                    print(f" bond  oo.{DisulfPairID[sbi][0]}.SG oo.{DisulfPairID[sbi][1]}.SG", file=open(TLEaPinput, 'a'))
-                    print(f" bond  or.{DisulfPairID[sbi][0]}.SG or.{DisulfPairID[sbi][1]}.SG", file=open(TLEaPinput, 'a'))
-                    print(f" bond  ro.{DisulfPairID[sbi][0]}.SG ro.{DisulfPairID[sbi][1]}.SG", file=open(TLEaPinput, 'a'))
-                    print(f" bond  rr.{DisulfPairID[sbi][0]}.SG rr.{DisulfPairID[sbi][1]}.SG", file=open(TLEaPinput, 'a'))
-
-#------------------------------------------------------------------------------
-# Regardless of which hemes constitute the selected pair, bond definitions 
-# need to be provided for each heme in the structure. Thus, we read in 
-# ResIndexing.txt now instead of SelResIndexing.txt. The bond definitions are
-# quadrupled because each heme is present in the structure for the four 
-# microstates of the selected heme pair, namely, OO, OR, RO, and RR.
-#------------------------------------------------------------------------------
-
-        # Add this set to keep track of defined bonds
-        defined_bonds = set()
-
-        idx=0
-        with open("ResIndexing.txt") as fp:
-            Lines = fp.readlines()
-            for line in Lines:
-                EntryLength = len(line.strip().split(" "))
-                HemeType = line.strip().split(" ")[-2]
-                AxLigType = line.strip().split(" ")[-1]
-
-                if ( EntryLength == 8 ) and ( HemeType == "c"):
-                    idx+=1
-                    CYSb = int(line.strip().split(" ")[0])
-                    CYSc = int(line.strip().split(" ")[1])
-                    Ligp = int(line.strip().split(" ")[2])
-                    Ligd = int(line.strip().split(" ")[3])
-                    HEM = int(line.strip().split(" ")[5])
-                if ( EntryLength == 6 ) and ( HemeType == "b"):
-                    idx+=1
-                    Ligp = int(line.strip().split(" ")[0])
-                    Ligd = int(line.strip().split(" ")[1])
-                    HEM = int(line.strip().split(" ")[3])
-
-                print(f"""
+    def _write_single_heme_bonds(self, f, heme: HemeDefinition):
+        """Write bonds for a single heme"""
+        print(f"""
 #------------------------------------------------------------
-#For hemes {HEM}
+#For heme {heme.heme_id}
 
-#Bond ligating atoms to Fe center""", file=open(TLEaPinput, 'a'))
+#Bond ligating atoms to Fe center""", file=f)
 
-                print(f""" bond  oo.{Ligp}.NE2   oo.{HEM}.FE""", file=open(TLEaPinput, 'a'))
-                if (AxLigType == "HH"):
-                    print(f""" bond  oo.{Ligd}.NE2   oo.{HEM}.FE""", file=open(TLEaPinput, 'a'))
-                elif (AxLigType == "HM"):
-                    print(f""" bond  oo.{Ligd}.SD   oo.{HEM}.FE""", file=open(TLEaPinput, 'a'))
+        # Write Fe-ligand bonds
+        for prefix in ['oo', 'or', 'ro', 'rr']:
+            print(f" bond {prefix}.{heme.ligand_proximal}.NE2 {prefix}.{heme.heme_id}.FE", file=f)
+            atom_type = "NE2" if heme.is_his_his() else "SD"
+            print(f" bond {prefix}.{heme.ligand_distal}.{atom_type} {prefix}.{heme.heme_id}.FE", file=f)
 
-                print(f"""\n bond  or.{Ligp}.NE2   or.{HEM}.FE""", file=open(TLEaPinput, 'a'))
-                if (AxLigType == "HH"):
-                    print(f""" bond  or.{Ligd}.NE2   or.{HEM}.FE""", file=open(TLEaPinput, 'a'))
-                elif (AxLigType == "HM"):
-                    print(f""" bond  or.{Ligd}.SD   or.{HEM}.FE""", file=open(TLEaPinput, 'a'))
-                    
-                print(f"""\n bond  ro.{Ligp}.NE2   ro.{HEM}.FE""", file=open(TLEaPinput, 'a'))
-                if (AxLigType == "HH"):
-                    print(f""" bond  ro.{Ligd}.NE2   ro.{HEM}.FE""", file=open(TLEaPinput, 'a'))
-                elif (AxLigType == "HM"):
-                    print(f""" bond  ro.{Ligd}.SD   ro.{HEM}.FE""", file=open(TLEaPinput, 'a'))
+        # Write backbone bonds
+        print(f"\n#Bond axially coordinated residues to preceding and proceeding residues", file=f)
+        for residue in [heme.ligand_proximal, heme.ligand_distal]:
+            for bond in [(residue-1, residue), (residue, residue+1)]:
+                if bond not in self.defined_bonds:
+                    for prefix in ['oo', 'or', 'ro', 'rr']:
+                        print(f" bond {prefix}.{bond[0]}.C {prefix}.{bond[1]}.N", file=f)
+                    self.defined_bonds.add(bond)
 
-                print(f"""\n bond  rr.{Ligp}.NE2   rr.{HEM}.FE""", file=open(TLEaPinput, 'a'))
-                if (AxLigType == "HH"):
-                    print(f""" bond  rr.{Ligd}.NE2   rr.{HEM}.FE""", file=open(TLEaPinput, 'a'))
-                elif (AxLigType == "HM"):
-                    print(f""" bond  rr.{Ligd}.SD   rr.{HEM}.FE""", file=open(TLEaPinput, 'a'))
-  
-                print(f"""
-#Bond axially coordinated residues to preceeding and proceeding residues """, file=open(TLEaPinput, 'a'))
+        # Write thioether bonds for c-type hemes
+        if heme.is_c_type():
+            print(f"\n#Bond heme thioethers to protein backbone", file=f)
+            for prefix in ['oo', 'or', 'ro', 'rr']:
+                print(f" bond {prefix}.{heme.cys_b}.CA {prefix}.{heme.heme_id}.CBB2", file=f)
+                print(f" bond {prefix}.{heme.cys_c}.CA {prefix}.{heme.heme_id}.CBC1", file=f)
 
-                # Check and write bonds only if they haven't been defined yet
-                for bond in [
-                    (Ligp-1, Ligp),
-                    (Ligp, Ligp+1),
-                    (Ligd-1, Ligd),
-                    (Ligd, Ligd+1)
-                ]:
-                    if bond not in defined_bonds:
-                        print(f" bond oo.{bond[0]}.C   oo.{bond[1]}.N", file=open(TLEaPinput, 'a'))
-                        print(f" bond or.{bond[0]}.C   or.{bond[1]}.N", file=open(TLEaPinput, 'a'))
-                        print(f" bond ro.{bond[0]}.C   ro.{bond[1]}.N", file=open(TLEaPinput, 'a'))
-                        print(f" bond rr.{bond[0]}.C   rr.{bond[1]}.N", file=open(TLEaPinput, 'a'))
-                        defined_bonds.add(bond)
+        # Write propionic acid bonds
+        print(f"\n#Bond propionic acids to heme", file=f)
+        for prefix in ['oo', 'or', 'ro', 'rr']:
+            print(f" bond {prefix}.{heme.heme_id}.C2A {prefix}.{heme.heme_id+1}.CA", file=f)
+            print(f" bond {prefix}.{heme.heme_id}.C3D {prefix}.{heme.heme_id+2}.CA", file=f)
 
-                if (HemeType == "c"):
-                    print(f"""
-#Bond heme thioethers to protein backbone""", end=" ", file=open(TLEaPinput, 'a'))
-                if (HemeType == "c"):
-                    print(f"""
- bond  oo.{CYSb}.CA   oo.{HEM}.CBB2
- bond  oo.{CYSc}.CA   oo.{HEM}.CBC1
-
- bond  or.{CYSb}.CA   or.{HEM}.CBB2
- bond  or.{CYSc}.CA   or.{HEM}.CBC1
-
- bond  ro.{CYSb}.CA   ro.{HEM}.CBB2
- bond  ro.{CYSc}.CA   ro.{HEM}.CBC1
-
- bond  rr.{CYSb}.CA   rr.{HEM}.CBB2
- bond  rr.{CYSc}.CA   rr.{HEM}.CBC1
- """, end=" ", file=open(TLEaPinput, 'a'))
-
-                print(f"""
-#Bond propionic acids to heme
- bond  oo.{HEM}.C2A   oo.{HEM+1}.CA
- bond  oo.{HEM}.C3D   oo.{HEM+2}.CA
-
- bond  or.{HEM}.C2A   or.{HEM+1}.CA
- bond  or.{HEM}.C3D   or.{HEM+2}.CA
-
- bond  ro.{HEM}.C2A   ro.{HEM+1}.CA
- bond  ro.{HEM}.C3D   ro.{HEM+2}.CA
-
- bond  rr.{HEM}.C2A   rr.{HEM+1}.CA
- bond  rr.{HEM}.C3D   rr.{HEM+2}.CA
- """, file=open(TLEaPinput, 'a'))
-
+    def _write_footer(self, f, heme1_id: int, heme2_id: int):
+        """Write final commands to save topology and coordinate files"""
         print(f"""
 # Save topology and coordinate files
- saveamberparm  oo o{Hi}-o{Hj}.prmtop o{Hi}-o{Hj}.rst7
- saveamberparm  or o{Hi}-r{Hj}.prmtop o{Hi}-r{Hj}.rst7
- saveamberparm  ro r{Hi}-o{Hj}.prmtop r{Hi}-o{Hj}.rst7
- saveamberparm  rr r{Hi}-r{Hj}.prmtop r{Hi}-r{Hj}.rst7
+ saveamberparm oo o{heme1_id}-o{heme2_id}.prmtop o{heme1_id}-o{heme2_id}.rst7
+ saveamberparm or o{heme1_id}-r{heme2_id}.prmtop o{heme1_id}-r{heme2_id}.rst7
+ saveamberparm ro r{heme1_id}-o{heme2_id}.prmtop r{heme1_id}-o{heme2_id}.rst7
+ saveamberparm rr r{heme1_id}-r{heme2_id}.prmtop r{heme1_id}-r{heme2_id}.rst7
 
-quit""", file=open(TLEaPinput, 'a'))
+quit""", file=f)
 
-        print(f"""
- Using TLEaP to build the redox microstate topologies for Heme-{Hi} and Heme-{Hj}... """)
-        subprocess.run(f"tleap -s -f GeneratePairIntTopologiesForHems{Hi}-{Hj}.in > GeneratePairIntTopologiesForHems{Hi}-{Hj}.log", shell=True)
+class PairedChargeAssignment:
+    """Main class for handling paired charge assignments"""
+    def __init__(self, force_field_dir: str, ff_choice: str, ref_redox_state: str, input_dict: dict):
+        try:
+            print(f"Initializing PairedChargeAssignment...")
+            print(f"Force field directory: {force_field_dir}")
+            print(f"Force field choice: {ff_choice}")
+            print(f"Reference redox state: {ref_redox_state}")
+            self.ff_params = ForceFieldParameters(force_field_dir, ff_choice)
+            self.ref_redox_state = RedoxState.OXIDIZED if ref_redox_state == "O" else RedoxState.REDUCED
+            self.input_dict = input_dict
+            print("Successfully initialized PairedChargeAssignment")
+            self.process_heme_pairs()
+        except Exception as e:
+            print(f"\nError during PairedChargeAssignment initialization:")
+            print(f"Error type: {type(e).__name__}")
+            print(f"Error message: {str(e)}")
+            print(f"Force field dir: {force_field_dir}")
+            print(f"FF choice: {ff_choice}")
+            print(f"Redox state: {ref_redox_state}")
+            raise
 
-        chk=0
-        for k in ("o", "r"):
-            for l in ("o", "r"):
-                if (os.path.isfile(f"{k}{Hi}-{l}{Hj}.prmtop") == True) and (os.path.isfile(f"{k}{Hi}-{l}{Hj}.rst7") == True):
-                    print(f"""  √ {k}{Hi} -- {l}{Hj}: TLEaP finished successfully!""")
-                if (os.path.isfile(f"{k}{Hi}-{l}{Hj}.prmtop") == False) or (os.path.isfile(f"{k}{Hi}-{l}{Hj}.rst7") == False):
-                    chk+=1
-                    print(f"""
-   X {k}{Hi} -- {l}{Hj}: TLEaP failed. 
-   Please check GeneratePairIntTopologiesForHems{Hi}-{Hj}.log""")
-    
-        if (chk != 0):
-            sys.exit(f"""
- TLEaP failed to build the topologies for one or more redox microstates. 
- Please inspect PairInt_{Hi}-{Hj}.log and GeneratePairIntTopologiesForHems{Hi}-{Hj}.log 
- before re-running this module \n""")
+    def process_heme_pairs(self):
+        """Main processing method"""
+        try:
+            print("Starting to load heme definitions...")
+            heme_definitions = self._load_heme_definitions()
+            print("Successfully loaded heme definitions")
+        
+            print("Validating heme counts...")
+            self._validate_heme_counts(heme_definitions)
+            print("Successfully validated heme counts")
+        
+            print("Generating heme pairs...")
+            heme_pairs = list(itertools.combinations(heme_definitions, r=2))
+            print(f"   There are {len(heme_definitions)} hemes")
+            print(f"   There is/are {len(heme_pairs)} unique heme-heme pairwise interactions")
+        
+            for pair in heme_pairs:
+                print(f"\nProcessing heme pair {pair[0].heme_id}-{pair[1].heme_id}...")
+                try:
+                    self._process_single_pair(pair)
+                    print(f"Successfully completed processing pair {pair[0].heme_id}-{pair[1].heme_id}")
+                except Exception as e:
+                    print(f"Error processing heme pair {pair[0].heme_id}-{pair[1].heme_id}:")
+                    print(f"Error type: {type(e).__name__}")
+                    print(f"Error message: {str(e)}")
+                    raise
+                
+        except Exception as e:
+            print(f"\nError in process_heme_pairs:")
+            print(f"Error type: {type(e).__name__}")
+            print(f"Error message: {str(e)}")
+            print("Full heme definitions and state:")
+            if 'heme_definitions' in locals():
+                print(f"Number of heme definitions: {len(heme_definitions)}")
+                for heme in heme_definitions:
+                    print(f"Heme: {heme}")
+            else:
+                print("Heme definitions not yet loaded")
+            raise
+
+    def _load_heme_definitions(self) -> List[HemeDefinition]:
+        """Load heme definitions from ResIndexing.txt"""
+        if not os.path.isfile("SelResIndexing.txt"):
+            raise FileNotFoundError("""
+SelResIndexing.txt is missing.
+Something went wrong when you defined
+the linear sequence of hemes.
+
+This problem must be resolved before 
+proceeding.""")
             
+        definitions = []
+        with open("SelResIndexing.txt") as f:
+            for line in f:
+                heme_def = self._parse_heme_line(line)
+                if heme_def:
+                    definitions.append(heme_def)
+        return definitions
+        
+    def _parse_heme_line(self, line: str) -> Optional[HemeDefinition]:
+        """Parse a single line from ResIndexing.txt into a HemeDefinition"""
+        parts = line.strip().split()
+        if len(parts) < 6:
+            return None
+            
+        heme_type = HemeType(parts[-2])
+        ligation_type = LigationType(parts[-1])
+        
+        if heme_type == HemeType.C:
+            return HemeDefinition(
+                heme_id=int(parts[5]),
+                heme_type=heme_type,
+                ligation_type=ligation_type,
+                cys_b=int(parts[0]),
+                cys_c=int(parts[1]),
+                ligand_proximal=int(parts[2]),
+                ligand_distal=int(parts[3])
+            )
+        else:
+            return HemeDefinition(
+                heme_id=int(parts[3]),
+                heme_type=heme_type,
+                ligation_type=ligation_type,
+                ligand_proximal=int(parts[0]),
+                ligand_distal=int(parts[1])
+            )
+
+    def _validate_heme_counts(self, heme_definitions: List[HemeDefinition]):
+        """Validate the counts of different heme types"""
+        counts = {
+            'c_HH': sum(1 for h in heme_definitions if h.is_c_type() and h.is_his_his()),
+            'c_HM': sum(1 for h in heme_definitions if h.is_c_type() and not h.is_his_his()),
+            'b_HH': sum(1 for h in heme_definitions if not h.is_c_type() and h.is_his_his()),
+            'b_HM': sum(1 for h in heme_definitions if not h.is_c_type() and not h.is_his_his())
+        }
+        
+        total = sum(counts.values())
+        if total != len(heme_definitions):
+            raise ValueError(f"""
+ The total number of hemes ({len(heme_definitions)}) in ResIndexing.txt 
+ does NOT equal the sum of c-type His-His ({counts['c_HH']}), 
+ b-type His-His ({counts['b_HH']}), c-type His-Met ({counts['c_HM']}),
+ and b-type His-Met ({counts['b_HM']}) hemes. These are the only
+ types of hemes that can currently be analyzed with BioDC.
+ Please revise ResIndexing.txt before re-running BioDC.""")
+
+    def _process_single_pair(self, pair: Tuple[HemeDefinition, HemeDefinition]):
+        """Process a single pair of hemes"""
+        try:
+            h1_id, h2_id = pair[0].heme_id, pair[1].heme_id
+            print(f"""
+ ------------------------------------------------
+ Topologies for Heme Pair {h1_id} - {h2_id} 
+ ------------------------------------------------""")
+        
+            # Generate VMD script
+            print(f"Generating VMD script PairInt_{h1_id}-{h2_id}.tcl...")
+            vmd_file = f"PairInt_{h1_id}-{h2_id}.tcl"
+            vmd_gen = VMDScriptGenerator(vmd_file)
+        
+            # Generate all redox state combinations
+            print("Writing VMD commands for redox state combinations...")
+            for state1 in RedoxState:
+                for state2 in RedoxState:
+                    print(f"  Processing {state1.value}{h1_id}-{state2.value}{h2_id} state...")
+                    vmd_gen.add_heme_modification(pair[0], state1)
+                    vmd_gen.add_heme_modification(pair[1], state2)
+                    vmd_gen.add_final_commands(f"{state1.value}{h1_id}-{state2.value}{h2_id}")
+        
+            # Close the VMD script
+            vmd_gen.finalize()
+        
+            # Generate TLeap script
+            print(f"Generating TLeap input file GeneratePairIntTopologiesForHems{h1_id}-{h2_id}.in...")
+            tleap_file = f"GeneratePairIntTopologiesForHems{h1_id}-{h2_id}.in"
+            tleap_gen = TLeapScriptGenerator(self.ff_params)
+            tleap_gen.generate_script(pair, tleap_file)
+        
+            # Run external tools
+            self._run_external_tools(h1_id, h2_id)
+        except Exception as e:
+            print(f"\nError in _process_single_pair: {str(e)}")
+            raise
+
+    def _run_external_tools(self, h1_id: int, h2_id: int):
+            """Run VMD and TLeap with error checking"""
+            # Run VMD
+            print(f"\nUsing VMD to generate redox microstate PDBs for Heme-{h1_id} and Heme-{h2_id}...")
+            vmd_command = f"vmd -e PairInt_{h1_id}-{h2_id}.tcl > PairInt_{h1_id}-{h2_id}.log"
+            subprocess.run(vmd_command, shell=True)
+
+            # Process the generated PDB files to add TER records
+            print("\nProcessing PDB files to add TER records...")
+            for state1 in RedoxState:
+                for state2 in RedoxState:
+                    pdb_file = f"{state1.value}{h1_id}-{state2.value}{h2_id}.pdb"
+                    if os.path.exists(pdb_file):
+                        print(f"  Adding TER records to {pdb_file}...")
+                        temp_pdb = f"{state1.value}{h1_id}-{state2.value}{h2_id}_temp.pdb"
+                        PDBProcessor.insert_ter_records(pdb_file, temp_pdb)
+                        os.replace(temp_pdb, pdb_file)  # Replace original with processed version
+
+            # Check VMD results
+            errors = []
+            for state1 in RedoxState:
+                for state2 in RedoxState:
+                    final_pdb = f"{state1.value}{h1_id}-{state2.value}{h2_id}.pdb"
+                
+                    if os.path.isfile(final_pdb):
+                        print(f"  √ {state1.value}{h1_id} -- {state2.value}{h2_id}: VMD finished successfully!")
+                    else:
+                        errors.append(f"Failed to generate {final_pdb}")
+
+            if errors:
+                error_msg = "\n".join(errors)
+                raise RuntimeError(f"""
+    VMD failed to generate the PDB for one or more redox microstates:
+    {error_msg}
+    Please inspect PairInt_{h1_id}-{h2_id}.log before re-running this module""")
+
+            # Run TLeap
+            print(f"\nUsing TLEaP to build the redox microstate topologies for Heme-{h1_id} and Heme-{h2_id}...")
+            tleap_command = f"tleap -s -f GeneratePairIntTopologiesForHems{h1_id}-{h2_id}.in > GeneratePairIntTopologiesForHems{h1_id}-{h2_id}.log"
+            subprocess.run(tleap_command, shell=True)
+
+            # Check TLeap results
+            errors = []
+            for state1 in RedoxState:
+                for state2 in RedoxState:
+                    prmtop = f"{state1.value}{h1_id}-{state2.value}{h2_id}.prmtop"
+                    rst7 = f"{state1.value}{h1_id}-{state2.value}{h2_id}.rst7"
+                
+                    if os.path.isfile(prmtop) and os.path.isfile(rst7):
+                        print(f"  √ {state1.value}{h1_id} -- {state2.value}{h2_id}: TLEaP finished successfully!")
+                    else:
+                        errors.append(f"Missing {prmtop} or {rst7}")
+
+            if errors:
+                error_msg = "\n".join(errors)
+                raise RuntimeError(f"""
+    TLEaP failed to build the topologies for one or more redox microstates:
+    {error_msg}
+    Please inspect GeneratePairIntTopologiesForHems{h1_id}-{h2_id}.log before re-running this module""")
+        
+def main(force_field_dir: str, ff_choice: str, ref_redox_state: str, input_dict: dict):
+    """Main entry point for the paired charge assignment process"""
+    try:
+        processor = PairedChargeAssignment(force_field_dir, ff_choice, ref_redox_state, input_dict)
+        processor.process_heme_pairs()
+    except Exception as e:
+        print(f"\nError: {str(e)}", file=sys.stderr)
+        sys.exit(1)
+
+if __name__ == "__main__":
+    if len(sys.argv) != 4:
+        print("Usage: python PairedChargeAssignment.py <force_field_dir> <ff_choice> <ref_redox_state>")
+        sys.exit(1)
+
+    # When called from command line, use empty dict
+    main(sys.argv[1], sys.argv[2], sys.argv[3], {})

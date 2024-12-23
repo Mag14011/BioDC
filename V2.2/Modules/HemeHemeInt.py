@@ -4,6 +4,7 @@ import os
 import sys
 import itertools
 import subprocess
+import argparse
 from subprocess import Popen
 ################################################################################################################################################
 # Custom Modules 
@@ -331,11 +332,20 @@ def HemeHemeInt(LaunchDir, ForceFieldDir, FFchoice, OutPrefix, SelRefRedoxState,
         else:
             print(" Sorry, I didn't understand your choice. Please try again.")
 
-    print(f"""
+    try:
+        print("""
  ================================================
  Generating topologies for Redox Microstates
  ================================================""")
-    PairedChargeAssignment.PairedChargeAssignment(ForceFieldDir, FFchoice, SelRefRedoxState, InputDict)
+        PairedChargeAssignment.PairedChargeAssignment(ForceFieldDir, FFchoice, SelRefRedoxState, InputDict)
+    except Exception as e:
+        print(f"""
+Detailed error in PairedChargeAssignment module:
+Error type: {type(e).__name__}
+Error message: {str(e)}
+
+Please check the error messages above and logs for more details.""")
+        raise  # This will show the full traceback
 
     idx = 0
     if os.path.isfile("SelResIndexing.txt"):
@@ -540,6 +550,21 @@ def HemeHemeInt(LaunchDir, ForceFieldDir, FFchoice, OutPrefix, SelRefRedoxState,
  Analyzing Heme Cooperativity
  ================================================""")
 
+    # Get make_periodic parameter
+    while True:
+        if "MakePeriodic" in InputDict:
+            make_periodic = InputDict["MakePeriodic"].lower() in ['true', 'yes', 'y', '1']
+            print(f"MakePeriodic = {make_periodic}", file=open(f"{LaunchDir}/InteractiveInput.txt", 'a'))
+            break
+        else:
+            choice = input(" Include step from last heme back to first? (yes/no): ").lower()
+            print(f"MakePeriodic = {choice}", file=open(f"{LaunchDir}/InteractiveInput.txt", 'a'))
+            if choice in ['yes', 'y', 'no', 'n']:
+                make_periodic = choice in ['yes', 'y']
+                break
+            else:
+                print(" Please answer yes or no.")
+
     # Determine appropriate model based on user input
     while True:
         if "CooperativityModel" in InputDict:
@@ -549,16 +574,16 @@ def HemeHemeInt(LaunchDir, ForceFieldDir, FFchoice, OutPrefix, SelRefRedoxState,
             model = input("""
  Which model should be used to analyze cooperativity?
  Options:
-   'ind' (independent only)
-   'seq' (sequential only)
-   'both' (both models)
+   'geo' (geometric pathway)
+   'seq' (sequential pathway)
+   'both' (analyze both pathways)
  Your choice: """).lower()
             print(f"CooperativityModel = {model}", file=open(f"{LaunchDir}/InteractiveInput.txt", 'a'))
 
-        if model in ['ind', 'seq', 'both']:
+        if model in ['geo', 'seq', 'both']:
             break
         else:
-            print(" Invalid choice. Please select 'ind', 'seq', or 'both'.")
+            print(" Invalid choice. Please select 'geo', 'seq', or 'both'.")
 
     # Get energy shift parameter
     while True:
@@ -623,25 +648,80 @@ def HemeHemeInt(LaunchDir, ForceFieldDir, FFchoice, OutPrefix, SelRefRedoxState,
             else:
                 print(" Invalid choice. Please select 'ox', 'red', or 'both'.")
 
-    # Call AnalyzeHemeCooperativity with the appropriate parameters
-    AHC.process_matrix(
-        name="BioDC",
-        filepath="StateEnergies.txt",
-        model=model,
-        energy_shift=energy_shift,
-        interaction_scale=interaction_scale,
-        adjacent_only=adjacent_only,
-        output_dir=LaunchDir
-    )
+    # Process the analysis
+    try:
+        print("\nProcessing cooperativity analysis...")
+        
+        # Create path to StateEnergies.txt in EE directory
+        state_energies_file = os.path.join(LaunchDir, "EE", "StateEnergies.txt")
+        
+        # Create output directory if it doesn't exist
+        output_dir = os.path.join(LaunchDir, "EE")
+        if not os.path.exists(output_dir):
+            os.makedirs(output_dir)
+            
+        if model == 'both':
+            # Process both models
+            seq_result = AHC.process_matrix(
+                name="BioDC", 
+                filepath=state_energies_file,  # Full path to input file
+                model='seq',
+                energy_shift=energy_shift,
+                interaction_scale=interaction_scale,
+                adjacent_only=adjacent_only,
+                make_periodic=make_periodic,
+                output_dir=output_dir  # Full path to output directory
+            )
+            
+            geo_result = AHC.process_matrix(
+                name="BioDC",
+                filepath=state_energies_file,  # Full path to input file
+                model='geo',
+                energy_shift=energy_shift,
+                interaction_scale=interaction_scale,
+                adjacent_only=adjacent_only,
+                make_periodic=make_periodic,
+                output_dir=output_dir  # Full path to output directory
+            )
+            
+            if seq_result and geo_result:
+                # Create comparison plot in same directory
+                AHC.create_comparison_plot(seq_result, geo_result, output_dir)
+                
+        else:
+            # Process single model
+            result = AHC.process_matrix(
+                name="BioDC",
+                filepath=state_energies_file,  # Full path to input file
+                model=model,
+                energy_shift=energy_shift,
+                interaction_scale=interaction_scale,
+                adjacent_only=adjacent_only,
+                make_periodic=make_periodic,
+                output_dir=output_dir  # Full path to output directory
+            )
 
-    print("""
- Analysis complete. Output files have been generated in the working directory.
- - Redox plots: redox_plot.png
- - Data file: redox_data.txt
- - ΔG analysis files: DG_*.txt
- - Potential progression plot: potential_progression_BioDC.png
- - ΔG landscape plot: DG_landscape_BioDC.png (if adjacent_only=True)
-    """)
+        if model == 'both':
+            print(f"""
+ Analysis complete. Output files have been generated in the EE directory:
+ - Redox plots: redox_plot_seq.png and redox_plot_geo.png
+ - Data files: redox_data_BioDC_seq.txt and redox_data_BioDC_geo.txt
+ - ΔG analysis files: DG_ind_BioDC.txt, DG_seq_BioDC.txt, and DG_geo_BioDC.txt
+ - Potential progression plots: potential_progression_seq_BioDC.png and potential_progression_geo_BioDC.png""")
+        else:
+            print(f"""
+ Analysis complete. Output files have been generated in the EE directory:
+ - Redox plot: redox_plot_{model}.png
+ - Data file: redox_data_BioDC_{model}.txt
+ - ΔG analysis files: DG_ind_BioDC.txt and DG_{model}_BioDC.txt
+ - Potential progression plot: potential_progression_{model}_BioDC.png""")
+            
+        if adjacent_only:
+            print(f" - ΔG landscape plot: DG_landscape_BioDC_{model}.png")
+            
+    except Exception as e:
+        print(f"\nError during cooperativity analysis: {str(e)}")
+        print("Please check the input parameters and try again.")
 
     return None
 ################################################################################################################################################
