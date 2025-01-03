@@ -1,0 +1,34 @@
+                # Analyze Cooperativities
+                if 4 in selected_nums:
+                    print("\nLaunching cooperativity analysis...")
+                    cooperativity_results = self.analyze_cooperativity(sequence=sequence)
+                    
+                    if cooperativity_results:
+                        # Store full results in the instance's computed_params
+                        self.computed_params.cooperativity_results = cooperativity_results
+                        computed_params.cooperativity_results = cooperativity_results
+                        
+                        # Extract and store DG values for potential rate calculations
+                        if 'sequential' in cooperativity_results:
+                            seq_results = cooperativity_results['sequential']
+                            if isinstance(seq_results, (list, tuple)):
+                                # Multiple interaction levels
+                                for i, level_result in enumerate(seq_results, 1):
+                                    if isinstance(level_result, dict) and 'delta_G' in level_result:
+                                        dg_values = [dg[2] for dg in level_result['delta_G']]
+                                        self.computed_params.dg_values_dict[f'Sequential (Level {i})'] = dg_values
+                                        computed_params.dg_values_dict[f'Sequential (Level {i})'] = dg_values
+                            elif isinstance(seq_results, dict) and 'delta_G' in seq_results:
+                                dg_values = [dg[2] for dg in seq_results['delta_G']]
+                                self.computed_params.dg_values_dict['Sequential'] = dg_values
+                                computed_params.dg_values_dict['Sequential'] = dg_values
+                        
+                        if 'geometric' in cooperativity_results:
+                            geo_results = cooperativity_results['geometric']
+                            if isinstance(geo_results, dict) and 'delta_G' in geo_results:
+                                dg_values = [dg[2] for dg in geo_results['delta_G']]
+                                self.computed_params.dg_values_dict['Geometric'] = dg_values
+                                computed_params.dg_values_dict['Geometric'] = dg_values
+                        
+                        print("\nCooperativity analysis complete!")
+                        print(f"Results saved in: {self.ee_dir}/cooperativity_analysis/")
