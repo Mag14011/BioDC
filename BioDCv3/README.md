@@ -22,7 +22,7 @@ once you install the package.
 There is currently a graphical user interface (GUI) for the 
 Structure Preparation and Relaxation division that is accessible by
 
-''bash
+'''bash
 biodc-spr-gui
 '''
 
