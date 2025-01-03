@@ -13,18 +13,14 @@ BioDC has three large divisions:
 
 There is a comprehensive command-line interface via:
 
-'''bash
 biodc-cli
-'''
 
 once you install the package.
 
 There is currently a graphical user interface (GUI) for the 
 Structure Preparation and Relaxation division that is accessible by
 
-'''bash
 biodc-spr-gui
-'''
 
 once you install the package.
 
