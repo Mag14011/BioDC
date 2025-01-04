@@ -190,6 +190,22 @@ class PDBProcessor:
                 
         return normal_vector, center
 
+    def calculate_plane_separation(self, coords1: Dict[str, np.ndarray],
+                                    coords2: Dict[str, np.ndarray]) -> float:
+        """Calculate the vertical separation between two heme planes."""
+        normal1, center1 = self.fit_plane_to_heme(coords1)
+        normal2, center2 = self.fit_plane_to_heme(coords2)
+        
+        # Use average of the two normals for projection direction
+        avg_normal = (normal1 + normal2) / 2
+        avg_normal = avg_normal / np.linalg.norm(avg_normal)
+        
+        # Project center-to-center vector onto average normal
+        center_vector = center2 - center1
+        vertical_separation = abs(np.dot(center_vector, avg_normal))
+        
+        return vertical_separation
+
     def calculate_plane_angle(self, coords1: Dict[str, np.ndarray],
                             coords2: Dict[str, np.ndarray]) -> float:
         """Calculate the angle between two heme group planes."""
@@ -223,12 +239,12 @@ class PDBProcessor:
         
         return min_dist
 
-    def measure_heme_angles(self, pdb_file: str, 
-                          sequence_file: Optional[str] = None,
-                          topology: Optional[str] = None) -> List[Dict]:
-        """Calculate angles between consecutive heme pairs."""
+    def measure_heme_geometry(self, pdb_file: str,
+                            sequence_file: Optional[str] = None,
+                            topology: Optional[str] = None) -> List[Dict]:
+        """Calculate angles and vertical separations between consecutive heme pairs."""
         atoms_dict = self.read_pdb_atoms(pdb_file)
-        
+
         if sequence_file:
             residue_pairs = self.read_linearized_sequence(sequence_file)
         else:
@@ -241,18 +257,25 @@ class PDBProcessor:
                 residue_pairs = []
                 for branch in sequence:
                     residue_pairs.extend(list(zip(branch[:-1], branch[1:])))
-        
-        angles = []
+
+        measurements = []
         for res1, res2 in residue_pairs:
             if res1 in atoms_dict and res2 in atoms_dict:
                 try:
                     angle = self.calculate_plane_angle(atoms_dict[res1], atoms_dict[res2])
-                    angles.append({'pair': [res1, res2], 'angle': angle})
+                    separation = self.calculate_plane_separation(atoms_dict[res1], atoms_dict[res2])
+                    stacking_type = self.classify_stacking(angle, separation)
+                    measurements.append({
+                        'pair': [res1, res2],
+                        'angle': angle,
+                        'separation': separation,
+                        'stacking_type': stacking_type
+                    })
                 except ValueError as e:
-                    print(f"Warning: Could not calculate angle for residues {res1}-{res2}: {str(e)}",
-                          file=sys.stderr)
-        
-        return angles
+                    print(f"Warning: Could not calculate geometry for residues {res1}-{res2}: {str(e)}",
+                        file=sys.stderr)
+
+        return measurements
 
     def measure_avg_dist(self, pdb_file: str,
                         sequence_file: Optional[str] = None,
@@ -305,12 +328,25 @@ class PDBProcessor:
         else:
             raise ValueError(f"Missing FE atoms in residues {first_res} or {second_to_last_res}")
 
-    def classify_stacking(self, angle: float) -> str:
-        """Classify heme stacking based on angle."""
-        if angle < 45.0 or angle > 135.0:
-            return "slip-stacked"
-        else:
+    def classify_stacking(self, angle: float, separation: float) -> str:
+        """
+        Classify heme stacking based on angle and vertical separation.
+
+        Args:
+            angle: Angle between plane normals in degrees
+            separation: Vertical separation between planes in Angstroms
+
+        Returns:
+            str: 'co-planar', 'slip-stacked', or 'T-stacked'
+        """
+        if 45.0 <= angle <= 135.0:
             return "T-stacked"
+        else:  # angle < 45.0 or angle > 135.0
+            # Use vertical separation to distinguish co-planar from slip-stacked
+            if separation < 2.0:  # threshold for considering planes "co-planar"
+                return "co-planar"
+            else:
+                return "slip-stacked"
 
     def analyze_stacking_statistics(self, angles: List[Dict], distances: List[Dict]) -> Dict:
         """Analyze statistics for different stacking arrangements."""
@@ -381,10 +417,50 @@ def format_measurement_output(results: Dict) -> str:
             output.append(f"Branch {i}: " + " → ".join(str(x) for x in branch))
         output.append("")
 
-    # Format combined angle and distance data with stacking classification
-    if 'angles' in results and 'distances' in results:
+    # Format geometry data if present
+    if 'geometry' in results:
         output.append("Heme Pair Analysis:")
         output.append("-" * 17)
+        for data in results['geometry']:
+            res1, res2 = data['pair']
+            angle = data['angle']
+            separation = data['separation']
+            stacking = data['stacking_type']
+            output.append(f"Hemes {res1:4d}-{res2:<4d}: {angle:6.1f}° | {separation:6.1f} Å | {stacking}")
+        output.append("")
+
+        # Group and summarize by stacking type
+        stacking_summary = {}
+        for data in results['geometry']:
+            stype = data['stacking_type']
+            if stype not in stacking_summary:
+                stacking_summary[stype] = {
+                    'count': 0,
+                    'angles': [],
+                    'separations': []
+                }
+            stacking_summary[stype]['count'] += 1
+            stacking_summary[stype]['angles'].append(data['angle'])
+            stacking_summary[stype]['separations'].append(data['separation'])
+
+        output.append("Stacking Statistics:")
+        output.append("-" * 19)
+        for stype in ['co-planar', 'slip-stacked', 'T-stacked']:
+            if stype in stacking_summary:
+                s = stacking_summary[stype]
+                angles = np.array(s['angles'])
+                seps = np.array(s['separations'])
+                output.append(f"{stype.title()} Arrangements:")
+                output.append(f"  Count: {s['count']}")
+                output.append(f"  Angles: {np.mean(angles):.1f}° ± {np.std(angles):.1f}°")
+                output.append(f"  Plane separations: {np.mean(seps):.1f} ± {np.std(seps):.1f} Å")
+                output.append(f"  Separation range: {np.min(seps):.1f} - {np.max(seps):.1f} Å")
+                output.append("")
+
+    # Keep the legacy stacking stats if present (for backwards compatibility)
+    elif 'angles' in results and 'distances' in results:
+        output.append("Heme Pair Analysis (Legacy Mode):")
+        output.append("-" * 30)
         for angle_data, dist_data in zip(results['angles'], results['distances']):
             res1, res2 = angle_data['pair']
             angle = angle_data['angle']
@@ -392,21 +468,6 @@ def format_measurement_output(results: Dict) -> str:
             stacking = "Slip-stacked" if angle < 45.0 or angle > 135.0 else "T-stacked"
             output.append(f"Hemes {res1:4d}-{res2:<4d}: {angle:6.1f}° | {dist:6.1f} Å | {stacking}")
         output.append("")
-
-    # Format stacking statistics if present
-    if 'stacking_stats' in results:
-        stats = results['stacking_stats']
-        output.append("Stacking Statistics:")
-        output.append("-" * 19)
-        for stype in ['slip-stacked', 'T-stacked']:
-            if stype in stats:
-                s = stats[stype]
-                output.append(f"{stype.title()} Arrangements:")
-                output.append(f"  Count: {s['count']}")
-                output.append(f"  Angles: {s['mean_angle']:.1f}° ± {s['std_angle']:.1f}°")
-                output.append(f"  Distances: {s['mean_distance']:.1f} ± {s['std_distance']:.1f} Å")
-                output.append(f"  Distance range: {s['min_distance']:.1f} - {s['max_distance']:.1f} Å")
-                output.append("")
 
     # Format length if present
     if 'length' in results:
@@ -437,6 +498,7 @@ def main():
     processor.distance_cutoff = args.distance_cutoff
     results = {}
 
+
     try:
         # If using automatic detection, include the detected sequence
         if not args.sequence_file:
@@ -449,12 +511,16 @@ def main():
 
         # Perform requested measurements
         if 'angles' in args.measurements:
-            angles = processor.measure_heme_angles(
+            geometry_data = processor.measure_heme_geometry(
                 args.pdb_file,
                 sequence_file=args.sequence_file,
                 topology=args.topology
             )
+            # Extract angles for backwards compatibility
+            angles = [{'pair': data['pair'], 'angle': data['angle']}
+                     for data in geometry_data]
             results['angles'] = angles
+            results['geometry'] = geometry_data  # Store full geometry data
 
         if 'distances' in args.measurements:
             distances = processor.measure_avg_dist(
@@ -485,6 +551,7 @@ def main():
     except Exception as e:
         print(f"Error: {str(e)}", file=sys.stderr)
         sys.exit(1)
+
 
     # Format and output results
     formatted_output = format_measurement_output(results)

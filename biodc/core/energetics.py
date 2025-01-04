@@ -115,6 +115,7 @@ class EnergeticEvaluation:
         table.add_column("Heme Pair", style="cyan")
         table.add_column("Edge-to-Edge Distance (Å)", justify="right")
         table.add_column("Plane Angle (°)", justify="right")
+        table.add_column("Vertical Separation (Å)", justify="right")
         table.add_column("Stacking Type", justify="center")
         
         # Analyze consecutive heme pairs
@@ -128,20 +129,26 @@ class EnergeticEvaluation:
                 atoms_dict[heme2]
             )
             
-            # Calculate plane angle
+            # Calculate plane angle and separation
             plane_angle = processor.calculate_plane_angle(
                 atoms_dict[heme1], 
                 atoms_dict[heme2]
             )
             
+            vertical_separation = processor.calculate_plane_separation(
+                atoms_dict[heme1], 
+                atoms_dict[heme2]
+            )
+            
             # Classify stacking
-            stacking_type = processor.classify_stacking(plane_angle)
+            stacking_type = processor.classify_stacking(plane_angle, vertical_separation)
             
             # Add row to table
             table.add_row(
                 f"{heme1} → {heme2}", 
                 f"{min_distance:.2f}", 
-                f"{plane_angle:.2f}", 
+                f"{plane_angle:.2f}",
+                f"{vertical_separation:.2f}", 
                 stacking_type
             )
         
@@ -159,7 +166,7 @@ class EnergeticEvaluation:
             Selected sequence of heme residue IDs
         """
         import time
-    
+
         start_time = time.time()
         print("\nStarting heme sequence detection process...")
         sys.stdout.flush()
@@ -176,7 +183,7 @@ class EnergeticEvaluation:
         # Initial distance cutoff
         current_cutoff = 13.0
         processor.distance_cutoff = current_cutoff
-      
+    
         print("\nAutomatically detecting possible heme sequences. Please wait! ...")
         sys.stdout.flush()
 
@@ -196,7 +203,7 @@ class EnergeticEvaluation:
                     branched_sequences = processor.detect_branched_sequence(atoms_dict)
                 except ValueError:
                     pass
-               
+            
                 print(f"Sequence detection complete. Total time: {time.time() - start_time:.2f} seconds")
                 sys.stdout.flush()
 
@@ -287,6 +294,7 @@ class EnergeticEvaluation:
                     table.add_column("Heme Pair", style="cyan")
                     table.add_column("Edge-to-Edge Distance (Å)", justify="right")
                     table.add_column("Plane Angle (°)", justify="right")
+                    table.add_column("Vertical Separation (Å)", justify="right")
                     table.add_column("Stacking Type", justify="center")
                     
                     # Analyze consecutive heme pairs
@@ -300,20 +308,25 @@ class EnergeticEvaluation:
                             atoms_dict[heme2]
                         )
                         
-                        # Calculate plane angle
+                        # Calculate plane angle and separation
                         plane_angle = processor.calculate_plane_angle(
+                            atoms_dict[heme1], 
+                            atoms_dict[heme2]
+                        )
+                        vertical_separation = processor.calculate_plane_separation(
                             atoms_dict[heme1], 
                             atoms_dict[heme2]
                         )
                         
                         # Classify stacking
-                        stacking_type = processor.classify_stacking(plane_angle)
+                        stacking_type = processor.classify_stacking(plane_angle, vertical_separation)
                         
                         # Add row to table
                         table.add_row(
                             f"{heme1} → {heme2}", 
                             f"{min_distance:.2f}", 
-                            f"{plane_angle:.2f}", 
+                            f"{plane_angle:.2f}",
+                            f"{vertical_separation:.2f}",
                             stacking_type
                         )
                     
@@ -373,6 +386,7 @@ class EnergeticEvaluation:
             self.interaction_manager.input_dict.pop('calculator_selection', None)
             self.interaction_manager.input_dict.pop('use_existing_interactions', None)
             self.interaction_manager.input_dict.pop('dg_source_selection', None)
+            self.interaction_manager.input_dict.pop('existing_hda',None)
 
             # Define calculation options
             calc_options = [

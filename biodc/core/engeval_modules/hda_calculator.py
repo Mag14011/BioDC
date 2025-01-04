@@ -8,6 +8,10 @@ of heme groups using plane angle and distance calculations.
 from typing import List, Dict, Optional
 from pathlib import Path
 import logging
+import matplotlib.pyplot as plt
+import numpy as np
+from rich.console import Console
+from rich.table import Table
 
 from biodc.utils.structure_analyzer import PDBProcessor
 from biodc.utils.interaction import InteractionManager
@@ -110,8 +114,8 @@ class CouplingCalculator:
             # Get coordinates for current and next heme
             heme1_coords = atoms_dict[sequence[i]]
             heme2_coords = atoms_dict[sequence[i+1]]
-            
-            # Calculate plane angle
+       
+            # Calculate plane angle and separation
             angle = self.structure_analyzer.calculate_plane_angle(
                 heme1_coords, heme2_coords
             )
@@ -121,9 +125,15 @@ class CouplingCalculator:
                 heme1_coords, heme2_coords
             )
             
-            # Classify stacking
-            stacking_type = self.structure_analyzer.classify_stacking(angle)
+            # Calculate vertical separation
+            vertical_separation = self.structure_analyzer.calculate_plane_separation(
+                heme1_coords, heme2_coords
+            )
             
+            # Classify stacking using both angle and separation
+            stacking_type = self.structure_analyzer.classify_stacking(angle, vertical_separation)
+
+
             # Estimate coupling based on stacking type
             if stacking_type == "co-planar":
                 coupling = self.coupling_values['co-planar']
@@ -140,13 +150,23 @@ class CouplingCalculator:
                 'acceptor_heme': sequence[i+1],
                 'angle': angle,
                 'distance': min_distance,
+                'vertical_separation': vertical_separation,
                 'stacking_type': stacking_type,
                 'coupling': coupling
             })
-        
+
         # Write comprehensive report
         self._write_coupling_report(couplings_data)
-        
+
+        # Print summary table to terminal
+        self._print_coupling_summary(couplings_data)
+
+        # Create and save coupling profile plot
+        self._plot_coupling_profile(couplings_data)
+
+        # Write comprehensive report
+        self._write_coupling_report(couplings_data)
+
         # Return just the coupling values
         return [data['coupling'] for data in couplings_data]
     
@@ -215,25 +235,26 @@ class CouplingCalculator:
             )
         
         return couplings
-    
+
     def _write_coupling_report(self, couplings_data: List[Dict]):
         """
         Generate a detailed coupling report
-        
+
         Args:
             couplings_data: List of detailed coupling calculations
         """
         with open(self.ee_dir / "Hda.txt", 'w') as f:
             f.write("Heme Plane Angle and Electronic Coupling Analysis\n")
             f.write("=" * 50 + "\n\n")
-            
+
             for data in couplings_data:
                 f.write(
                     f"Hda(HEM-{data['donor_heme']} <-> HEM-{data['acceptor_heme']}):\n"
-                    f"  Plane angle     = {data['angle']:10.3f} deg\n"
-                    f"  Edge-to-edge    = {data['distance']:10.3f} Å\n"
-                    f"  Stacking type   = {data['stacking_type']}\n"
-                    f"  Hda coupling    = {data['coupling']:6.3f} meV\n\n"
+                    f"  Plane angle        = {data['angle']:10.3f} deg\n"
+                    f"  Edge-to-edge       = {data['distance']:10.3f} Å\n"
+                    f"  Vertical separation= {data['vertical_separation']:10.3f} Å\n"
+                    f"  Stacking type      = {data['stacking_type']}\n"
+                    f"  Hda coupling       = {data['coupling']:6.3f} meV\n\n"
                 )
     
     def _write_manual_hda(self, sequence: List[int], couplings: List[float]):
@@ -255,3 +276,91 @@ class CouplingCalculator:
                     f"Hda(HEM-{donor} <-> HEM-{acceptor}):\n"
                     f"  Hda coupling    = {coupling:6.3f} meV\n\n"
                 )
+
+    def _print_coupling_summary(self, couplings_data: List[Dict]):
+        """
+        Print a summary table of key geometric parameters and coupling values.
+        
+        Args:
+            couplings_data: List of detailed coupling calculations
+        """
+        console = Console()
+        table = Table(title="Electronic Coupling Analysis")
+        
+        # Add columns
+        table.add_column("Heme Pair", style="cyan")
+        table.add_column("Vertical Sep. (Å)", justify="right")
+        table.add_column("Plane Angle (°)", justify="right")
+        table.add_column("Stacking Type", justify="center")
+        table.add_column("Hda (meV)", justify="right")
+        
+        # Add rows
+        for data in couplings_data:
+            table.add_row(
+                f"{data['donor_heme']} → {data['acceptor_heme']}",
+                f"{data['vertical_separation']:.2f}",
+                f"{data['angle']:.2f}",
+                data['stacking_type'],
+                f"{data['coupling']:.2f}"
+            )
+        
+        console.print(table)
+
+    def _plot_coupling_profile(self, couplings_data: List[Dict]):
+        """
+        Create and save a plot of coupling values along the heme sequence.
+        
+        Args:
+            couplings_data: List of detailed coupling calculations
+        """
+        # Extract data for plotting
+        heme_pairs = [f"{d['donor_heme']}-{d['acceptor_heme']}" for d in couplings_data]
+        coupling_values = [d['coupling'] for d in couplings_data]
+        stacking_types = [d['stacking_type'] for d in couplings_data]
+        
+        # Create color map for stacking types
+        color_map = {
+            'co-planar': 'blue',
+            'slip-stacked': 'green',
+            'T-stacked': 'red'
+        }
+        colors = [color_map[stype] for stype in stacking_types]
+        
+        # Create figure with specified size
+        plt.figure(figsize=(3.3, 3.3), dpi=300)
+        
+        # Create line plot with markers
+        plt.plot(range(len(heme_pairs)), coupling_values, 
+                linestyle=':', color='black', zorder=1)  # Dotted line
+        
+        # Add markers
+        for i, (value, color) in enumerate(zip(coupling_values, colors)):
+            plt.plot(i, value, marker='o', markersize=8,
+                    markerfacecolor=color, markeredgecolor='black',
+                    markeredgewidth=1, linestyle='none', zorder=2)
+        
+        # Customize plot
+        plt.xlabel('Heme Pair')
+        plt.ylabel('Electronic Coupling (meV)')
+        plt.xticks(range(len(heme_pairs)), heme_pairs, rotation=45, ha='right')
+        
+        # Direct tick marks inward
+        plt.tick_params(axis='both', direction='in')
+        
+        # Add legend
+        legend_elements = [plt.Line2D([0], [0], marker='o', color='w',
+                                    markerfacecolor=color, markeredgecolor='black',
+                                    markersize=8, label=stype)
+                        for stype, color in color_map.items()
+                        if stype in stacking_types]  # Only show used types
+        plt.legend(handles=legend_elements, loc='upper right', fontsize='small')
+        
+        # Adjust layout
+        plt.tight_layout()
+        
+        # Save plot
+        plot_path = self.ee_dir / "coupling_profile.png"
+        plt.savefig(plot_path, dpi=300, bbox_inches='tight')
+        plt.close()
+        
+        print(f"\nCoupling profile plot saved to: {plot_path}")
