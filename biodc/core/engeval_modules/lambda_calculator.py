@@ -381,7 +381,7 @@ class LambdaCalculator:
                     for idx, value in enumerate(lambda_values):
                         print(
                             f"lambda_value_{idx}",
-                            f"Step {idx+1}: λ = {value:.1f} meV",
+                            f"Step {idx+1}: λ = {value:.3f} eV",
                         )
                     return lambda_values, es_values
 
@@ -448,7 +448,7 @@ class LambdaCalculator:
 
                     lambda_value = self.interaction_manager.prompt(
                         f"lambda_manual_{i}",
-                        f"Enter reorganization energy for step {i+1} (meV): ",
+                        f"Enter reorganization energy for step {i+1} (eV): ",
                         input_type=float
                     )
                     lambda_values.append(lambda_value)
@@ -469,7 +469,7 @@ class LambdaCalculator:
                 f"  Donor SASA:     {result.donor_sasa:.1f} Å²\n"
                 f"  Acceptor SASA:  {result.acceptor_sasa:.1f} Å²\n"
                 f"  Distance:       {result.distance:.1f} Å\n"
-                f"  Lambda:         {lambda_value:.3f} meV\n"
+                f"  Lambda:         {lambda_value:.3f} eV\n"
                 f"  Dielectric:     {es:.2f}",
             )
 
@@ -502,7 +502,7 @@ class LambdaCalculator:
         for i in range(num_steps):
             value = self.interaction_manager.prompt(
                 f"lambda_manual_{i}",
-                f"Enter reorganization energy for step {i+1} (meV): ",
+                f"Enter reorganization energy for step {i+1} (eV): ",
                 input_type=float
             )
             values.append(value)
@@ -522,7 +522,7 @@ class LambdaCalculator:
             (1 / ((2 * self.params.ra) / bohr)) - \
             (1 / (result.distance / bohr))
 
-        # Final calculation with conversion to meV
+        # Final calculation with conversion to eV
         lambda_out = M * R * 27.2114 
         return lambda_out
 
