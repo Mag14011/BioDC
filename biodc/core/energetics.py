@@ -174,7 +174,7 @@ class EnergeticEvaluation:
         sys.stdout.flush()
 
         # Initial distance cutoff
-        current_cutoff = 20.0
+        current_cutoff = 13.0
         processor.distance_cutoff = current_cutoff
       
         print("\nAutomatically detecting possible heme sequences. Please wait! ...")

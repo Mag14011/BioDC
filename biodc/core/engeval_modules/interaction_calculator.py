@@ -14,6 +14,11 @@ import itertools
 from concurrent.futures import ThreadPoolExecutor
 import numpy as np
 
+try:
+    import matplotlib.pyplot as plt
+except ImportError:
+    plt = None
+
 from biodc.utils.interaction import InteractionManager
 from biodc.utils.state_selector import RedoxStateManager, RedoxState
 
@@ -186,12 +191,147 @@ class HemeInteractionCalculator:
         print(f"Maximum site energy: {np.max(np.diag(matrix_np)):.3f} eV")
         print(f"Minimum site energy: {np.min(np.diag(matrix_np)):.3f} eV")
 
+    def plot_energy_matrix(self,
+                        sequence: List[int],
+                        energies: Dict[Tuple[int, int], float],
+                        output_file: Optional[Path] = None) -> None:
+        """
+        Visualize the energy matrix with color-coded diagonal and off-diagonal elements.
+
+        Args:
+            sequence: List of heme IDs in order
+            energies: Dictionary mapping heme pairs to their energies
+            output_file: Optional path to save the plot
+        """
+        if plt is None:
+            print("Matplotlib is not installed. Cannot create visualization.")
+            return
+
+        # Ask user about periodicity
+        use_periodic = self.interaction_manager.yes_no_prompt(
+            "use_periodic_numbering",
+            "\nUse periodic numbering (last heme as '1'')? [If no, will use sequential numbering]"
+        )
+
+        # Ask whether to shift diagonal elements
+        shift_diagonal = self.interaction_manager.yes_no_prompt(
+            "make_diagonal_relative_to_min",
+            "\nShould the minimum diagonal element be set as the zero reference point?"
+        )
+
+        # Convert dictionary to matrix form
+        n = len(sequence)
+        matrix = np.zeros((n, n))
+        for i, heme1_id in enumerate(sequence):
+            for j, heme2_id in enumerate(sequence):
+                if heme1_id <= heme2_id:
+                    matrix[i, j] = energies[(heme1_id, heme2_id)]
+                else:
+                    matrix[i, j] = energies[(heme2_id, heme1_id)]
+
+        # Convert to meV and store original min_diagonal if needed
+        matrix = matrix * 1000 #convert to meV 
+        min_diagonal = np.min(np.diag(matrix)) if shift_diagonal else None
+
+        # Shift diagonal if requested
+        if shift_diagonal:
+            matrix = matrix.copy()
+            np.fill_diagonal(matrix, matrix.diagonal() - min_diagonal)
+
+        # Create masks for diagonal and off-diagonal elements
+        diagonal_mask = ~np.eye(n, dtype=bool)
+        off_diagonal_mask = np.eye(n, dtype=bool)
+
+        # Calculate value ranges for color scales
+        diagonal_elements = np.diag(matrix)
+        off_diagonal_elements = matrix[~np.eye(n, dtype=bool)]
+        vmin_diag, vmax_diag = np.min(diagonal_elements), np.max(diagonal_elements)
+        vmin_off, vmax_off = np.min(off_diagonal_elements), np.max(off_diagonal_elements)
+
+        # Create figure and axis with appropriate size
+        plt.figure(figsize=(3.3, 3.3), dpi=300)
+        ax = plt.gca()
+
+        # Plot off-diagonal elements
+        plt.pcolormesh(np.ma.array(matrix, mask=off_diagonal_mask),
+                    cmap='YlOrBr_r',
+                    vmin=vmin_off,
+                    vmax=vmax_off)
+
+        # Plot diagonal elements
+        plt.pcolormesh(np.ma.array(matrix, mask=diagonal_mask),
+                    cmap='Blues_r',
+                    vmin=vmin_diag,
+                    vmax=vmax_diag)
+
+        # Add text annotations with dynamic color
+        for i in range(n):
+            for j in range(n):
+                val = matrix[i, j]
+                is_diagonal = (i == j)
+
+                # Determine text color based on background
+                if is_diagonal:
+                    if vmax_diag == vmin_diag:
+                        text_color = 'white' if vmin_diag < 0 else 'black'
+                    else:
+                        normalized_val = (val - vmin_diag) / (vmax_diag - vmin_diag)
+                        text_color = 'white' if normalized_val < 0.5 else 'black'
+                else:
+                    if vmax_off == vmin_off:
+                        text_color = 'white' if vmax_off < 0 else 'black'
+                    else:
+                        normalized_val = (val - vmin_off) / (vmax_off - vmin_off)
+                        text_color = 'white' if normalized_val < 0.6 else 'black'
+
+                plt.text(j + 0.5, i + 0.5, f'{val:.0f}',
+                        ha='center', va='center',
+                        color=text_color, fontsize=8)
+
+        # Create tick labels based on user choice
+        if use_periodic:
+            tick_labels = [str(i) for i in sequence[:-1]]
+            tick_labels.append("1'")  # Replace last number with "1'" for periodic
+        else:
+            tick_labels = [str(i) for i in sequence]  # Use sequential numbering
+
+        # Set ticks and labels
+        plt.xticks(np.arange(n) + 0.5, tick_labels)
+        plt.yticks(np.arange(n) + 0.5, tick_labels)
+
+        # Add labels and title
+        plt.xlabel('Heme Index')
+        plt.ylabel('Heme Index')
+        title = f'Energy Matrix (meV)'
+        if shift_diagonal:
+            title += f'\n(diagonal terms shifted by {min_diagonal:.2f})'
+        plt.title(title)
+
+        # Make plot square 
+        ax.set_aspect('equal')
+
+        # Adjust layout and save/show
+        plt.tight_layout()
+        
+        if output_file:
+            # Ensure the parent directory exists
+            output_file.parent.mkdir(parents=True, exist_ok=True)
+            # Save with high DPI and tight borders
+            plt.savefig(str(output_file), dpi=300, bbox_inches='tight')
+            print(f"\nPlot saved to: {output_file}")
+        else:
+            plt.show()
+        
+        plt.close()
 
     def compute_heme_interactions(self,
                                 sequence: List[int],
                                 dielectric_constants: List[float],
-                                n_parallel: Optional[int] = None
+                                n_parallel: Optional[int] = None,
+                                plot: bool = True,
+                                shift_diagonal: bool = False
     ) -> Dict[Tuple[int, int], float]:
+
         # First check for existing energy matrix
         matrix_file = self.ee_dir / "EnergyMatrix.txt"
 
@@ -202,6 +342,11 @@ class HemeInteractionCalculator:
             )
             if use_existing:
                 energies = self.read_and_display_energy_matrix()
+
+                print("\n Plotting Energy Matrix...")
+                output_path = self.ee_dir / "EnergyMatrix.png" 
+                self.plot_energy_matrix(sequence, energies, output_path)
+
                 if energies:
                     return energies
                 print("\nWarning: Could not read existing energy matrix.")
@@ -320,6 +465,13 @@ class HemeInteractionCalculator:
 
         # Display the matrix
         self.print_energy_matrix(sequence, energies)
+
+        # Plot the matrix if requested
+        if plot:
+            print("\n Plotting Energy Matrix...")
+            # Use default or provided plot name
+            output_path = self.ee_dir / "EnergyMatrix.png" 
+            self.plot_energy_matrix(sequence, energies, output_path)
 
         return energies
 

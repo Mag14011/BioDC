@@ -257,7 +257,7 @@ def create_res_indexing(pdb: str, input_dict: Dict, launch_dir: Path) -> str:
         if indexing.validate_environments():
             indexing.write_indexing_files()
             indexing.print_environment_summary()
-            print("\n" * 60)
+            print("\n")
             print("*" * 60)
             print(""" Please verify the identified residues in the ResIndexing.txt file.
  If corrections are needed, save them in CorrectedResIndexing.txt.
