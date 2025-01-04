@@ -682,29 +682,29 @@ class HemeInteractionCalculator:
             for param, value in default_params.items():
                 new_value = self.interaction_manager.prompt(
                     f"global_{param}",
-                    f"{param}: (current value: {value})\n"
-                    "Enter new value or press Enter to keep current: ",
+                    f"\nEnter value for {param}",  # Simplified message
                     input_type=type(value),
+                    default=value,  # Set the default value
                     allow_empty=True
                 )
-
-                # Use default value if new_value is None
+                
+                # Update parameter if a new value was provided
                 if new_value is not None:
                     default_params[param] = new_value
-            
+
             # Save global parameters
             with open(global_params_file, 'w') as f:
                 f.write(str(default_params))
-        
-        # Prompt for pair-specific parameters
+       
+        # Handle external dielectric constant
         epsout = self.interaction_manager.prompt(
             f"epsout_{heme1_id}_{heme2_id}",
-            f"External dielectric constant for heme pair {heme1_id}-{heme2_id} "
-            f"(current global value: {default_params.get('epsout', 80.0)}): ",
+            f"\nExternal dielectric constant for heme pair {heme1_id}-{heme2_id}",  # Remove the colon
             input_type=float,
+            default=default_params.get('epsout', 80.0),  # Set explicit default
             allow_empty=True
-        ) or default_params.get('epsout', 80.0)
-        
+        )
+
         # Save epsout to global params if not already present
         if 'epsout' not in default_params:
             default_params['epsout'] = epsout

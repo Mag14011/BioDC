@@ -64,7 +64,6 @@ class InteractionManager:
             print(f"Logging error details: {e}")
             logger.error(f"Error recording interaction: {e}")
 
-
     def prompt(self,
             key: str,
             message: str,
@@ -72,6 +71,7 @@ class InteractionManager:
             allow_empty: bool = False,
             input_type: type = str,
             default: Optional[Any] = None) -> Any:
+        
         if key in self.input_dict:
             value = self.input_dict[key]
             try:
@@ -92,75 +92,43 @@ class InteractionManager:
                 else:
                     value = click.prompt(message, type=input_type,
                                         default=default)
+                self._record_interaction(key, value)
+                return value
+                
             except ImportError:
-                # Fallback for standard input
+                # If we have a default value, show it in the prompt
                 if default is not None:
-                    prompt_text = f"{message} [{default}]: "
+                    prompt_text = f"{message} [default: {default}]: "
                 else:
-                    prompt_text = f"{message}: "
+                    prompt_text = message if message.endswith(': ') else f"{message}: "
 
                 raw_value = input(prompt_text).strip()
 
-                if not raw_value and default is not None:
-                    value = default
-                elif not raw_value and not allow_empty:
-                    print("Input cannot be empty. Please try again.")
-                    continue
-                else:
-                    try:
-                        value = input_type(raw_value) if raw_value else default
-                    except ValueError:
-                        print(f"Please enter a valid {input_type.__name__}")
+                # Handle empty input (just pressing Enter)
+                if not raw_value:
+                    if default is not None:
+                        self._record_interaction(key, default)
+                        return default
+                    elif allow_empty:
+                        self._record_interaction(key, '')
+                        return None
+                    else:
+                        print("Input cannot be empty. Please try again.")
                         continue
 
-            if choices and value not in choices:
-                print(f"Invalid choice. Please choose from {choices}")
-                continue
+                # Try to convert non-empty input to the required type
+                try:
+                    value = input_type(raw_value)
+                except ValueError:
+                    print(f"Please enter a valid {input_type.__name__}")
+                    continue
 
-            self._record_interaction(key, value)
-            return value
-
-######
-#   def prompt(self,
-#             key: str,
-#             message: str,
-#             choices: Optional[list] = None,
-#             allow_empty: bool = False,
-#             input_type: type = str) -> Any:
-#       if key in self.input_dict:
-#           value = self.input_dict[key]
-#           try:
-#               typed_value = input_type(value)
-#               if choices and typed_value not in choices:
-#                   raise ValueError
-#               return typed_value
-#           except ValueError:
-#               logger.warning(f"Invalid predefined input for {key}: {value}")
-
-#       while True:
-#           try:
-#               import click
-#               if choices:
-#                   value = click.prompt(message, type=click.Choice(choices), show_choices=True)
-#               else:
-#                   value = click.prompt(message, type=input_type)
-#           except ImportError:
-#               raw_value = input(f"{message}: ").strip()
-#               if not raw_value and not allow_empty:
-#                   print("Input cannot be empty. Please try again.")
-#                   continue
-#               try:
-#                   value = input_type(raw_value)
-#               except ValueError:
-#                   print(f"Please enter a valid {input_type.__name__}")
-#                   continue
-
-#           if choices and value not in choices:
-#               print(f"Invalid choice. Please choose from {choices}")
-#               continue
-
-#           self._record_interaction(key, value)
-#           return value
+                if choices and value not in choices:
+                    print(f"Invalid choice. Please choose from {choices}")
+                    continue
+                    
+                self._record_interaction(key, value)
+                return value
 
     def yes_no_prompt(self, key: str, message: str, default: Optional[bool] = None) -> bool:
         if key in self.input_dict:
