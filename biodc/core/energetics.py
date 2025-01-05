@@ -684,11 +684,12 @@ class EnergeticEvaluation:
         
         for dg_set, desc in zip(available_dgs, descriptions):
             try:
-                # Calculate rates using this DG set
+                # Calculate rates using this DG set without writing report
                 forward_rates, reverse_rates = self.rate_calculator.compute_marcus_rates(
                     lambda_values=lambda_values,
                     delta_g_values=dg_set,
-                    coupling_values=coupling_values
+                    coupling_values=coupling_values,
+                    write_report=False  # Don't write report for previews
                 )
                 
                 preview_results.append({
@@ -704,12 +705,20 @@ class EnergeticEvaluation:
         
         # Display comparison table
         if preview_results:
-            from tabulate import tabulate
+            from rich.console import Console
+            from rich.table import Table
             
-            # Create table data
-            headers = ["Step", "DG Source", "ΔG (eV)", "Forward Rate", "Reverse Rate"]
-            table_data = []
+            console = Console()
+            table = Table(title="Rate Preview Comparison")
             
+            # Add columns
+            table.add_column("Step", style="cyan")
+            table.add_column("DG Source", style="green")
+            table.add_column("ΔG (eV)", justify="right")
+            table.add_column("Forward Rate (s⁻¹)", justify="right")
+            table.add_column("Reverse Rate (s⁻¹)", justify="right")
+            
+            # Add data rows
             for result in preview_results:
                 desc = result['description']
                 for step, (dg, kf, kr) in enumerate(zip(
@@ -718,18 +727,18 @@ class EnergeticEvaluation:
                     result['reverse_rates']
                 )):
                     heme1, heme2 = sequence[step], sequence[step + 1]
-                    table_data.append([
+                    table.add_row(
                         f"{heme1}→{heme2}",
                         desc,
                         f"{dg:.3f}",
                         f"{kf:.2E}",
                         f"{kr:.2E}"
-                    ])
+                    )
                 # Add blank row between DG sets
-                table_data.append(["", "", "", "", ""])
+                table.add_row("", "", "", "", "")
             
-            print("\nRate Comparison:")
-            print(tabulate(table_data, headers=headers, tablefmt="grid"))
+            # Print table
+            console.print(table)
             
             # Add summary analysis
             print("\nSummary Analysis:")
@@ -859,7 +868,8 @@ class EnergeticEvaluation:
                             reverse_rates: List[float],
                             source_description: str = "Selected DG set") -> None:
         """
-        Display a formatted table of the final calculated rates and parameters.
+        Display a formatted table of the final calculated rates and parameters 
+        and generate plots.
 
         Args:
             sequence: List of heme IDs
@@ -902,13 +912,38 @@ class EnergeticEvaluation:
         print(f"\nSource of ΔG values: {source_description}")
         console.print(table)
 
+        # Generate plots
+        print("\nGenerating analysis plots...")
+        try:
+            # Store the values in the rate calculator for plotting
+            self.rate_calculator.lambda_values = lambda_values
+            self.rate_calculator.delta_g_values = dg_values
+            self.rate_calculator.coupling_values = coupling_values
+            self.rate_calculator.forward_rates = forward_rates
+            self.rate_calculator.reverse_rates = reverse_rates
+
+            # Generate plots
+            plot_path = self.ee_dir / "rate_analysis.png"
+            self.rate_calculator.plot_analysis(
+                pdb_file=self.pdb_file,  # We have this from initialization
+                save_path=str(plot_path),
+                dpi=300
+            )
+            print(f"Analysis plots saved to: {plot_path}")
+
+        except Exception as e:
+            print(f"Warning: Could not generate analysis plots: {str(e)}")
+
+
     def compute_rates(self,
-                    sequence: List[int],
-                    lambda_values: List[float],
-                    delta_g_values: List[float],
-                    coupling_values: List[float]) -> Tuple[List[float], List[float]]:
+                sequence: List[int],
+                lambda_values: List[float],
+                delta_g_values: List[float],
+                coupling_values: List[float]) -> Tuple[List[float], List[float]]:
         """
         Compute electron transfer rates.
+
+        Now includes generation of comprehensive analysis plots.
         """
         # Get user-selected DG values and source description
         selected_dgs = self._select_dg_values(
@@ -951,7 +986,14 @@ class EnergeticEvaluation:
             coupling_values=coupling_values
         )
 
-        # Display final rates table with all parameters
+        # Store results in computed_params for potential reuse
+        self.computed_params.lambda_values = lambda_values
+        self.computed_params.delta_g_values = selected_dgs
+        self.computed_params.coupling_values = coupling_values
+        self.computed_params.rates_forward = forward_rates
+        self.computed_params.rates_backward = reverse_rates
+
+        # Display final rates table and generate plots
         self._display_final_rates(
             sequence=sequence,
             dg_values=selected_dgs,
@@ -963,4 +1005,3 @@ class EnergeticEvaluation:
         )
 
         return forward_rates, reverse_rates
-
