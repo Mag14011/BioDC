@@ -19,7 +19,7 @@ class PDBProcessor:
             'NA', 'NB', 'NC', 'ND',
             'C1A', 'C4A', 'C1B', 'C4B', 'C1C', 'C4C', 'C1D', 'C4D'
         ]
-        self.distance_cutoff = 20.0
+        self.distance_cutoff = 13.0
 
     def read_linearized_sequence(self, filename: str) -> List[Tuple[int, int]]:
         """Read the linearized heme sequence file"""
