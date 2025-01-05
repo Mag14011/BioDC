@@ -387,6 +387,7 @@ class EnergeticEvaluation:
             self.interaction_manager.input_dict.pop('use_existing_interactions', None)
             self.interaction_manager.input_dict.pop('dg_source_selection', None)
             self.interaction_manager.input_dict.pop('existing_hda',None)
+            self.interaction_manager.input_dict.pop('cooperativity_model',None)
 
             # Define calculation options
             calc_options = [
@@ -479,7 +480,7 @@ class EnergeticEvaluation:
                         if 'sequential' in cooperativity_results:
                             seq_results = cooperativity_results['sequential']
                             
-                            # Store independent results
+                            # Store independent results if available
                             if 'delta_G_ind' in seq_results:
                                 dg_values = [dg[4] for dg in seq_results['delta_G_ind']]  # Get the dG value
                                 self.computed_params.dg_values_dict['Independent'] = dg_values
@@ -494,10 +495,13 @@ class EnergeticEvaluation:
                         
                         if 'geometric' in cooperativity_results:
                             geo_results = cooperativity_results['geometric']
-                            if 'delta_G' in geo_results:
-                                dg_values = [dg[4] for dg in geo_results['delta_G']]  # Get the dG value
+                            if 'delta_G_geo' in geo_results:
+                                dg_values = [dg[2] for dg in geo_results['delta_G_geo']]  # Get the dG value
                                 self.computed_params.dg_values_dict['Geometric'] = dg_values
                                 computed_params.dg_values_dict['Geometric'] = dg_values
+                        
+                        print("\nCooperativity analysis complete!")
+                        print(f"Results saved in: {self.ee_dir}/cooperativity_analysis/")
                         
                         print("\nCooperativity analysis complete!")
                         print(f"Results saved in: {self.ee_dir}/cooperativity_analysis/")

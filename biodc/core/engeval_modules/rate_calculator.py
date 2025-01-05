@@ -173,7 +173,7 @@ class RateCalculator:
             ax.set_title('Electron Transfer Rates vs. Sequence')
             ax.set_yscale('log')
             ax.legend()
-            
+ 
         def _plot_rate_distributions(self, ax: plt.Axes,
                                    forward_rates: List[float],
                                    reverse_rates: List[float],
@@ -187,15 +187,23 @@ class RateCalculator:
                 pdb_file, sequence_file, topology
             )
             
+            # Print for debugging
+            print("\nStacking types found:")
+            for i, geom in enumerate(geometry_data):
+                print(f"Pair {i+1}: {geom['stacking_type']}")
+            
             # Organize rates by stacking type
             stacking_data = {
-                'slip-stacked': {'forward': [], 'reverse': []},
                 'T-stacked': {'forward': [], 'reverse': []},
+                'slip-stacked': {'forward': [], 'reverse': []},
                 'co-planar': {'forward': [], 'reverse': []}
             }
             
             for i, geom in enumerate(geometry_data):
-                stype = geom['stacking_type'].lower()
+                stype = geom['stacking_type']  # Keep original case
+                if stype not in stacking_data:
+                    print(f"\nWarning: Unknown stacking type '{stype}'")
+                    continue
                 if i < len(forward_rates):
                     stacking_data[stype]['forward'].append(forward_rates[i])
                     stacking_data[stype]['reverse'].append(reverse_rates[i])
@@ -225,7 +233,6 @@ class RateCalculator:
                     patch.set_alpha(0.6)
                 
                 # Add vertical lines between stacking types
-                xmin, xmax = ax.get_xlim()
                 ymin, ymax = ax.get_ylim()
                 ax.vlines([3, 5], ymin, ymax, linestyles='solid', colors='gray', alpha=0.5)
                 
@@ -238,7 +245,7 @@ class RateCalculator:
             else:
                 ax.text(0.5, 0.5, 'No structural data available',
                        ha='center', va='center')
-    
+
     def __init__(self, 
                  interaction_manager: InteractionManager,
                  launch_dir: Path):
