@@ -180,194 +180,242 @@ class EnergeticEvaluation:
         print(f"PDB atoms read. Time taken: {time.time() - start_read:.2f} seconds")
         sys.stdout.flush()
 
-        # Initial distance cutoff
+        # Initial distance cutoff and retry tracking
         current_cutoff = 13.0
         processor.distance_cutoff = current_cutoff
-    
-        print("\nAutomatically detecting possible heme sequences. Please wait! ...")
-        sys.stdout.flush()
+        max_retries = 5
+        retry_count = 0
+        tried_thresholds = set()
+        
+        while retry_count < max_retries:
+            print(f"\nAttempting automatic detection with {current_cutoff}Å threshold...")
+            sys.stdout.flush()
 
-        start_detect = time.time()
-        while True:
+            start_detect = time.time()
+            linear_sequence = None
+            branched_sequences = []
+            detection_failed = False
+
             try:
-                # Try linear topology first
+                # Try linear topology
                 print("Detecting linear sequence...")
                 sys.stdout.flush()
                 linear_sequence = processor.detect_linear_sequence(atoms_dict)
                 
-                # Try branched topology
-                print("Detecting branched sequences...")
-                sys.stdout.flush()
-                branched_sequences = []
-                try:
-                    branched_sequences = processor.detect_branched_sequence(atoms_dict)
-                except ValueError:
-                    pass
-            
+                # Try branched topology only if linear fails
+                if not linear_sequence:
+                    print("Detecting branched sequences...")
+                    sys.stdout.flush()
+                    try:
+                        branched_sequences = processor.detect_branched_sequence(atoms_dict)
+                    except ValueError:
+                        pass
+
                 print(f"Sequence detection complete. Total time: {time.time() - start_time:.2f} seconds")
                 sys.stdout.flush()
 
-                # Build numbered menu options
+            except ValueError as e:
+                print(f"\nAutomatic detection failed: {e}")
+                detection_failed = True
+
+            # If we found any valid sequence, show the full menu
+            if linear_sequence or branched_sequences:
                 menu_options = []
                 option_num = 1
-                
-                # Add detected sequences with numbers
+
                 if linear_sequence:
                     menu_options.append(f"{option_num}) Use linear sequence: {' → '.join(map(str, linear_sequence))}")
                     option_num += 1
-                
+
                 for i, branch in enumerate(branched_sequences, 1):
                     menu_options.append(f"{option_num}) Use branch {i}: {' → '.join(map(str, branch))}")
                     option_num += 1
-                
-                # Add manual entry and threshold options
+
                 menu_options.extend([
-                    f"{option_num}) Enter sequence manually",
-                    f"{option_num + 1}) Adjust detection threshold (Current: {current_cutoff}Å)"
+                    f"{option_num}) Adjust detection threshold (Current: {current_cutoff}Å)",
+                    f"{option_num + 1}) Enter sequence manually"
                 ])
+
+                # Clear cached input before showing menu
+                self.interaction_manager.input_dict.pop('sequence_selection', None)
                 
-                # Create menu prompt with clear layout
+                # Show menu and get choice
                 menu_prompt = "\nSelect heme sequence:\n" + "\n".join(menu_options) + "\n\nEnter choice number: "
-                
-                # Get user selection
                 choice = self.interaction_manager.prompt(
                     "sequence_selection",
                     menu_prompt,
                     choices=[str(i) for i in range(1, len(menu_options) + 1)]
                 )
-                
-                # Process selection based on number chosen
                 choice_num = int(choice)
-                selected_option = menu_options[choice_num - 1]
                 
-                if "linear sequence" in selected_option.lower():
+                # Process choice
+                if "linear sequence" in menu_options[choice_num - 1].lower():
                     sequence = linear_sequence
-                
-                elif "branch" in selected_option.lower():
-                    branch_index = int(selected_option.split("branch")[1].split(":")[0].strip()) - 1
+                    break
+                elif "branch" in menu_options[choice_num - 1].lower():
+                    branch_index = int(menu_options[choice_num - 1].split("branch")[1].split(":")[0].strip()) - 1
                     sequence = branched_sequences[branch_index]
-                
-                elif "manually" in selected_option.lower():
-                    while True:
-                        manual_input = self.interaction_manager.prompt(
-                            "manual_sequence",
-                            "Enter heme residue IDs (space-separated):",
-                            input_type=str
-                        )
+                    break
+                elif "threshold" in menu_options[choice_num - 1].lower():
+                    retry_count += 1
+                    if retry_count >= max_retries:
+                        print("\nWarning: Multiple threshold adjustments have not helped.")
+                        print("The structure may not be suitable for automatic detection.")
                         
-                        try:
-                            sequence = [int(x) for x in manual_input.split()]
-                        except ValueError:
-                            print("Invalid input. Please enter integer residue IDs.")
+                        # Clear cached input before prompt
+                        self.interaction_manager.input_dict.pop('manual_entry_fallback', None)
+                        
+                        if self.interaction_manager.yes_no_prompt(
+                            "manual_entry_fallback",
+                            "\nWould you like to enter the sequence manually?"
+                        ):
+                            sequence = self._handle_manual_entry(atoms_dict)
+                            if sequence:
+                                break
+                        else:
+                            print("\nResetting retry count for one final attempt...")
+                            retry_count = 0
+                            tried_thresholds.clear()
                             continue
-                        
-                        # Validate all hemes exist in the structure
-                        if not all(heme_id in atoms_dict for heme_id in sequence):
-                            print("Error: Some heme IDs not found in the PDB structure.")
-                            continue
-                        
-                        # Confirm and display sequence
-                        confirm = self.interaction_manager.yes_no_prompt(
-                            "confirm_manual_sequence",
-                            f"Confirm sequence: {' → '.join(map(str, sequence))}?"
-                        )
-                        
-                        if confirm:
-                            break
-                
-                elif "threshold" in selected_option.lower():
-                    # Get new distance threshold from user
-                    current_cutoff = self.interaction_manager.prompt(
-                        "distance_threshold",
-                        f"Enter new distance threshold (current: {current_cutoff}Å):",
-                        input_type=float
-                    )
                     
-                    # Update processor's distance cutoff and continue loop
+                    # Get new threshold with guidance
+                    current_cutoff = self._get_new_threshold(current_cutoff, tried_thresholds)
+                    tried_thresholds.add(current_cutoff)
                     processor.distance_cutoff = current_cutoff
                     continue
-                
-                # Structural analysis of the selected sequence
-                if len(sequence) > 1:
-                    console = Console()
-                    table = Table(title="Heme Sequence Structural Analysis")
-                    table.add_column("Heme Pair", style="cyan")
-                    table.add_column("Edge-to-Edge Distance (Å)", justify="right")
-                    table.add_column("Plane Angle (°)", justify="right")
-                    table.add_column("Vertical Separation (Å)", justify="right")
-                    table.add_column("Stacking Type", justify="center")
                     
-                    # Analyze consecutive heme pairs
-                    for i in range(len(sequence) - 1):
-                        heme1 = sequence[i]
-                        heme2 = sequence[i+1]
-                        
-                        # Calculate minimum distance
-                        min_distance = processor.calculate_min_distance(
-                            atoms_dict[heme1], 
-                            atoms_dict[heme2]
-                        )
-                        
-                        # Calculate plane angle and separation
-                        plane_angle = processor.calculate_plane_angle(
-                            atoms_dict[heme1], 
-                            atoms_dict[heme2]
-                        )
-                        vertical_separation = processor.calculate_plane_separation(
-                            atoms_dict[heme1], 
-                            atoms_dict[heme2]
-                        )
-                        
-                        # Classify stacking
-                        stacking_type = processor.classify_stacking(plane_angle, vertical_separation)
-                        
-                        # Add row to table
-                        table.add_row(
-                            f"{heme1} → {heme2}", 
-                            f"{min_distance:.2f}", 
-                            f"{plane_angle:.2f}",
-                            f"{vertical_separation:.2f}",
-                            stacking_type
-                        )
-                    
-                    # Print the analysis table
-                    console.print(table)
+                else:  # Manual entry
+                    sequence = self._handle_manual_entry(atoms_dict)
+                    if sequence:
+                        break
+
+            else:  # No sequences found
+                print("\nNo valid sequences found. Options:")
+                print(f"1) Adjust detection threshold (Current: {current_cutoff}Å)")
+                print("2) Enter sequence manually")
                 
-                return sequence
+                # Clear cached input before showing options
+                self.interaction_manager.input_dict.pop('failed_detection_choice', None)
                 
-            except ValueError as e:
-                # If both linear and branched detection fail
-                print(f"Sequence detection error: {e}")
-                
-                # Fallback to manual entry
-                fallback = self.interaction_manager.yes_no_prompt(
-                    "manual_entry_fallback",
-                    "Automatic sequence detection failed. Enter sequence manually?"
+                choice = self.interaction_manager.prompt(
+                    "failed_detection_choice",
+                    "\nEnter choice number: ",
+                    choices=['1', '2']
                 )
                 
-                if fallback:
-                    while True:
-                        manual_input = self.interaction_manager.prompt(
-                            "manual_sequence_fallback",
-                            "Enter heme residue IDs (space-separated):",
-                            input_type=str
-                        )
+                if choice == '1':
+                    retry_count += 1
+                    if retry_count >= max_retries:
+                        print("\nWarning: Multiple threshold adjustments have not helped.")
+                        print("The structure may not be suitable for automatic detection.")
                         
-                        try:
-                            sequence = [int(x) for x in manual_input.split()]
-                        except ValueError:
-                            print("Invalid input. Please enter integer residue IDs.")
+                        # Clear cached input before prompt
+                        self.interaction_manager.input_dict.pop('manual_entry_fallback', None)
+                        
+                        if self.interaction_manager.yes_no_prompt(
+                            "manual_entry_fallback",
+                            "\nWould you like to enter the sequence manually?"
+                        ):
+                            sequence = self._handle_manual_entry(atoms_dict)
+                            if sequence:
+                                break
+                        else:
+                            print("\nResetting retry count for one final attempt...")
+                            retry_count = 0
+                            tried_thresholds.clear()
                             continue
-                        
-                        # Validate all hemes exist in the structure
-                        if not all(heme_id in atoms_dict for heme_id in sequence):
-                            print("Error: Some heme IDs not found in the PDB structure.")
-                            continue
-                        
-                        return sequence
-                else:
-                    # If user doesn't want manual entry, exit
-                    raise ValueError("No valid heme sequence selected.")
+                    
+                    # Get new threshold with guidance
+                    current_cutoff = self._get_new_threshold(current_cutoff, tried_thresholds)
+                    tried_thresholds.add(current_cutoff)
+                    processor.distance_cutoff = current_cutoff
+                    continue
+                    
+                else:  # Manual entry
+                    sequence = self._handle_manual_entry(atoms_dict)
+                    if sequence:
+                        break
+        
+        # If we've exceeded max retries without finding a sequence, fall back to manual entry
+        if retry_count >= max_retries and not sequence:
+            print("\nAutomatic detection unsuccessful after maximum attempts.")
+            sequence = self._handle_manual_entry(atoms_dict)
+        
+        # Analyze final sequence if it exists
+        if sequence and len(sequence) > 1:
+            self._analyze_sequence_structure(sequence, pdb_file)
+        
+        return sequence
+
+    def _get_new_threshold(self, current_cutoff: float, tried_thresholds: set) -> float:
+        """Helper method to get a new threshold value with guidance."""
+        while True:
+            try:
+                suggestion = ""
+                if tried_thresholds:
+                    min_tried = min(tried_thresholds)
+                    max_tried = max(tried_thresholds)
+                    if not any(t for t in tried_thresholds if min_tried < t < max_tried):
+                        suggestion = f"\nSuggestion: Try a value between {min_tried}Å and {max_tried}Å"
+                
+                print(f"\nPreviously tried thresholds: {', '.join(f'{t}Å' for t in sorted(tried_thresholds))}")
+                if suggestion:
+                    print(suggestion)
+                
+                # Clear cached input before threshold prompt
+                self.interaction_manager.input_dict.pop('new_threshold', None)
+                
+                new_cutoff = self.interaction_manager.prompt(
+                    "new_threshold",
+                    f"Enter new distance threshold (current: {current_cutoff}Å):",
+                    input_type=float
+                )
+                
+                if new_cutoff <= 0:
+                    print("Threshold must be positive")
+                    continue
+                    
+                if new_cutoff in tried_thresholds:
+                    print(f"\nWarning: {new_cutoff}Å has already been tried. Consider a different value.")
+                    continue
+                
+                return new_cutoff
+                
+            except ValueError:
+                print("Please enter a valid number")
+
+    def _handle_manual_entry(self, atoms_dict: Dict) -> Optional[List[int]]:
+        """Helper method to handle manual sequence entry."""
+        while True:
+            # Clear cached inputs before manual entry prompts
+            self.interaction_manager.input_dict.pop('manual_sequence', None)
+            self.interaction_manager.input_dict.pop('confirm_manual_sequence', None)
+            
+            manual_input = self.interaction_manager.prompt(
+                "manual_sequence",
+                "Enter heme residue IDs (space-separated):",
+                input_type=str
+            )
+            
+            try:
+                sequence = [int(x) for x in manual_input.split()]
+            except ValueError:
+                print("Invalid input. Please enter integer residue IDs.")
+                continue
+            
+            # Validate all hemes exist in structure
+            if not all(heme_id in atoms_dict for heme_id in sequence):
+                print("Error: Some heme IDs not found in the PDB structure.")
+                continue
+            
+            # Confirm sequence
+            if self.interaction_manager.yes_no_prompt(
+                "confirm_manual_sequence",
+                f"Confirm sequence: {' → '.join(map(str, sequence))}?"
+            ):
+                return sequence
+                
+            return None
 
     def run(self, pdb_file: str) -> EnergeticParameters:
         """
