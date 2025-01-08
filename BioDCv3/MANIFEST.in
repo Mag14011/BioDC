@@ -1,0 +1,27 @@
+# Include all Python source files
+recursive-include biodc *.py
+
+# Include the license file
+include LICENSE
+
+# Include force field data files
+recursive-include biodc/data/forcefield *.lib
+recursive-include biodc/data/forcefield *.frcmod
+
+# Include package data
+recursive-include biodc/data *
+
+# Documentation (if you have any)
+# include README.md
+# include docs/*.rst
+# include docs/*.md
+
+# Exclude compilation artifacts
+global-exclude *.pyc
+global-exclude *.pyo
+global-exclude *.pyd
+global-exclude __pycache__
+global-exclude *.so
+global-exclude *.dylib
+global-exclude .git*
+global-exclude .DS_Store
