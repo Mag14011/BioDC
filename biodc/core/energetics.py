@@ -180,6 +180,49 @@ class EnergeticEvaluation:
         print(f"PDB atoms read. Time taken: {time.time() - start_read:.2f} seconds")
         sys.stdout.flush()
 
+##########
+        # Check for single heme case
+        if len(atoms_dict) == 1:
+            single_heme_id = next(iter(atoms_dict.keys()))
+            print(f"\nDetected a single heme with ID: {single_heme_id}")
+        
+            # Ask user to confirm
+            confirm = self.interaction_manager.yes_no_prompt(
+                "confirm_single_heme",
+                f"Found only one heme (ID: {single_heme_id}). Proceed with this single heme?"
+            )
+        
+            if confirm:
+                return [single_heme_id]
+            else:
+                # If user doesn't confirm, let them enter manually
+                while True:
+                    manual_input = self.interaction_manager.prompt(
+                        "manual_sequence",
+                        "Enter heme residue IDs (space-separated):",
+                        input_type=str
+                    )
+                
+                    try:
+                        sequence = [int(x) for x in manual_input.split()]
+                    except ValueError:
+                        print("Invalid input. Please enter integer residue IDs.")
+                        continue
+                
+                    # Validate all hemes exist in the structure
+                    if not all(heme_id in atoms_dict for heme_id in sequence):
+                        print("Error: Some heme IDs not found in the PDB structure.")
+                        continue
+                
+                    # Confirm and display sequence
+                    confirm = self.interaction_manager.yes_no_prompt(
+                        "confirm_manual_sequence",
+                        f"Confirm sequence: {' → '.join(map(str, sequence))}?"
+                    )
+                
+                    if confirm:
+                        return sequence
+
         # Initial distance cutoff and retry tracking
         current_cutoff = 13.0
         processor.distance_cutoff = current_cutoff
@@ -420,42 +463,72 @@ class EnergeticEvaluation:
     def run(self, pdb_file: str) -> EnergeticParameters:
         """
         Execute the energetic evaluation workflow with flexible calculator selection.
+        Handles both multi-heme and single-heme cases.
         """
         # Select heme sequence
         sequence = self.select_heme_sequence(pdb_file)
-    
-        # Use class instance's computed_params
-        self.computed_params = EnergeticParameters()
-        computed_params = self.computed_params  # Local reference for convenience
+        
+        # Initialize parameters container
+        computed_params = EnergeticParameters()
         dielectric_constants = None
+        
+        # Check if we have a single heme or multiple hemes
+        is_single_heme = len(sequence) == 1
+        
+        if is_single_heme:
+            print(f"\nWorking with a single heme (ID: {sequence[0]})")
+            print("Only reaction free energy calculation is applicable for a single heme.")
 
         while True:
-            # Clear cached calculator selection before showing menu
-            self.interaction_manager.input_dict.pop('calculator_selection', None)
-            self.interaction_manager.input_dict.pop('use_existing_interactions', None)
-            self.interaction_manager.input_dict.pop('dg_source_selection', None)
-            self.interaction_manager.input_dict.pop('existing_hda',None)
-            self.interaction_manager.input_dict.pop('cooperativity_model',None)
+            # Only clear cached selections if they're not from the input file
+            # This modification preserves values from input.txt
+            input_file_keys = set()
+            if hasattr(self.interaction_manager, 'input_file') and self.interaction_manager.input_file.exists():
+                try:
+                    with open(self.interaction_manager.input_file, 'r') as f:
+                        for line in f:
+                            if '=' in line:
+                                key = line.split('=')[0].strip()
+                                input_file_keys.add(key)
+                except Exception:
+                    pass
+                    
+            # Only remove if not from input file
+            if 'calculator_selection' not in input_file_keys:
+                self.interaction_manager.input_dict.pop('calculator_selection', None)
+            if 'use_existing_interactions' not in input_file_keys:
+                self.interaction_manager.input_dict.pop('use_existing_interactions', None)
 
-            # Define calculation options
-            calc_options = [
-                "Reorganization Energy",
-                "Reaction Free Energy",
-                "Interaction Energies",
-                "Cooperativity Analysis",
-                "Electronic Couplings",
-                "Marcus Theory Rates",
-                "Exit Program"
-            ]
+            # Define calculation options based on whether we have single or multiple hemes
+            if is_single_heme:
+                calc_options = [
+                    "Reaction Free Energy",
+                    "Exit Program"
+                ]
+            else:
+                calc_options = [
+                    "Reorganization Energy",
+                    "Reaction Free Energy",
+                    "Interaction Energies",
+                    "Cooperativity Analysis",
+                    "Electronic Couplings",
+                    "Marcus Theory Rates",
+                    "Exit Program"
+                ]
             
             # Present numbered list of options
             print("\nSelect calculators to run (enter numbers separated by spaces):")
             for i, option in enumerate(calc_options, 1):
                 print(f"{i}) {option}")
-            print("0) Compute All Quantities")
+                
+            if not is_single_heme:
+                print("0) Compute All Quantities")
             
             # Get user selection one at a time
-            valid_choices = [str(i) for i in range(len(calc_options) + 1)]
+            valid_choices = [str(i) for i in range(1, len(calc_options) + 1)]
+            if not is_single_heme:
+                valid_choices.append("0")
+                
             selection = self.interaction_manager.prompt(
                 "calculator_selection",
                 "Enter calculator number:",
@@ -465,124 +538,129 @@ class EnergeticEvaluation:
             # Convert to int
             selected_num = int(selection)
 
-            # Check for exit selection
+            # For multi-heme: Check for exit selection (last option)
             if selected_num == len(calc_options):  # If last option (Exit) is selected
                 print("\nExiting program...")
                 return computed_params
 
-            # Handle "Compute All" selection
-            if selected_num == 0:
+            # Handle "Compute All" selection (only for multi-heme case)
+            if not is_single_heme and selected_num == 0:
                 selected_nums = list(range(1, len(calc_options)))
             else:
                 selected_nums = [selected_num]
 
             try:
-                # Compute reorganization energy
-                if 1 in selected_nums:
-                    print("\nCalculating reorganization energy...")
-                    lambda_vals, diel_consts = self.compute_lambda(sequence, pdb_file)
-                    computed_params.lambda_values = lambda_vals
-                    computed_params.dielectric_constants = diel_consts
-                    print("Reorganization energy calculation completed.")
-
-                # Compute reaction free energy
-                if 2 in selected_nums:
-                    if not computed_params.dielectric_constants:
-                        print(
-                            "Warning: Dielectric constants are needed."
-                            "You can enter them manually, or estimate them by computing the reorganization energy.")
-                
-                    print("\nCalculating reaction free energy...")
-                    computed_params.delta_g_values = self.compute_delta_g(
-                        sequence=sequence,
-                        dielectric_constants=computed_params.dielectric_constants
-                    )
-                    print("Reaction free energy calculation completed.")
-
-                # Compute interaction energy matrix
-                if 3 in selected_nums:
-                    if not computed_params.dielectric_constants:
-                        print(
-                            "Warning: Dielectric constants are needed. "
-                            "You can enter them manually, or estimate them by computing the reorganization energy."
-                        )
-                
-                    print("\nCalculating interaction energies...")
-                    computed_params.interaction_energies = self.compute_interactions(
-                        sequence=sequence, 
-                        dielectric_constants=computed_params.dielectric_constants  # Now using correct dielectric constants
-                    )
-                    print("Interaction energies calculation completed.")
-
-                # Analyze Cooperativities
-                if 4 in selected_nums:
-                    print("\nLaunching cooperativity analysis...")
-                    cooperativity_results = self.analyze_cooperativity(sequence=sequence)
-                    
-                    if cooperativity_results:
-                        # Store full results in both instance and local params
-                        self.computed_params.cooperativity_results = cooperativity_results
-                        computed_params.cooperativity_results = cooperativity_results
+                # Single heme case: Map the selected number to the appropriate calculator
+                if is_single_heme:
+                    # Map option 1 to reaction free energy for single heme
+                    if selected_num == 1:  # Reaction Free Energy
+                        print("\nCalculating reaction free energy...")
+                        # For single heme, we need to handle dielectric constants differently
+                        # since we can't compute them from reorganization energy
+                        if not computed_params.dielectric_constants:
+                            computed_params.dielectric_constants = self._get_manual_dielectric_constants()
                         
-                        # Extract and store DG values for potential rate calculations
-                        if 'sequential' in cooperativity_results:
-                            seq_results = cooperativity_results['sequential']
-                            
-                            # Store independent results if available
-                            if 'delta_G_ind' in seq_results:
-                                dg_values = [dg[4] for dg in seq_results['delta_G_ind']]  # Get the dG value
-                                self.computed_params.dg_values_dict['Independent'] = dg_values
-                                computed_params.dg_values_dict['Independent'] = dg_values
-                            
-                            # Store all sequential levels
-                            if 'delta_G_seq' in seq_results:
-                                for i, level_results in enumerate(seq_results['delta_G_seq'], 1):
-                                    dg_values = [dg[4] for dg in level_results]  # Get the dG value
-                                    self.computed_params.dg_values_dict[f'Sequential (Level {i})'] = dg_values
-                                    computed_params.dg_values_dict[f'Sequential (Level {i})'] = dg_values
-                        
-                        if 'geometric' in cooperativity_results:
-                            geo_results = cooperativity_results['geometric']
-                            if 'delta_G_geo' in geo_results:
-                                dg_values = [dg[2] for dg in geo_results['delta_G_geo']]  # Get the dG value
-                                self.computed_params.dg_values_dict['Geometric'] = dg_values
-                                computed_params.dg_values_dict['Geometric'] = dg_values
-                        
-                        print("\nCooperativity analysis complete!")
-                        print(f"Results saved in: {self.ee_dir}/cooperativity_analysis/")
-                        
-                        print("\nCooperativity analysis complete!")
-                        print(f"Results saved in: {self.ee_dir}/cooperativity_analysis/")
-
-                # Compute electronic couplings
-                if 5 in selected_nums:
-                    print("\nCalculating electronic couplings...")
-                    computed_params.coupling_values = self.compute_coupling(
-                        sequence, pdb_file)
-                    print("Electronic coupling calculation completed.")
-
-                # Compute Marcus Theory Rates
-                if 6 in selected_nums:
-                    if (not computed_params.lambda_values or 
-                        not computed_params.coupling_values):
-                        print("\nWarning: Marcus rates calculation requires:")
-                        print("- Reorganization energy (Option 1)")
-                        print("- Electronic coupling (Option 5)")
-                        print("Please calculate these quantities first.")
-                        continue
-                    
-                    print("\nCalculating Marcus theory rates...")
-                    try:
-                        computed_params.rates_forward, computed_params.rates_backward = self.compute_rates(
+                        computed_params.delta_g_values = self.compute_delta_g(
                             sequence=sequence,
-                            lambda_values=computed_params.lambda_values,
-                            delta_g_values=[],  # Placeholder - will be selected during computation
-                            coupling_values=computed_params.coupling_values
+                            dielectric_constants=computed_params.dielectric_constants
                         )
-                        print("Marcus rates calculation completed.")
-                    except Exception as e:
-                        print(f"\nError during rate calculation: {str(e)}")
-                        continue
+                        print("Reaction free energy calculation completed.")
+                
+                # Multi-heme case: Original logic
+                else:
+                    # Compute reorganization energy
+                    if 1 in selected_nums:
+                        print("\nCalculating reorganization energy...")
+                        lambda_vals, diel_consts = self.compute_lambda(sequence, pdb_file)
+                        computed_params.lambda_values = lambda_vals
+                        computed_params.dielectric_constants = diel_consts
+                        print("Reorganization energy calculation completed.")
+
+                    # Compute reaction free energy
+                    if 2 in selected_nums:
+                        if not computed_params.dielectric_constants:
+                            print(
+                                "Warning: Dielectric constants are needed."
+                                "You can enter them manually, or estimate them by computing the reorganization energy.")
+                            computed_params.dielectric_constants = self._get_manual_dielectric_constants()
+                    
+                        print("\nCalculating reaction free energy...")
+                        computed_params.delta_g_values = self.compute_delta_g(
+                            sequence=sequence,
+                            dielectric_constants=computed_params.dielectric_constants
+                        )
+                        print("Reaction free energy calculation completed.")
+
+                    # Compute interaction energy matrix
+                    if 3 in selected_nums:
+                        if not computed_params.dielectric_constants:
+                            print(
+                                "Warning: Dielectric constants are needed. "
+                                "You can enter them manually, or estimate them by computing the reorganization energy."
+                            )
+                            computed_params.dielectric_constants = self._get_manual_dielectric_constants()
+                    
+                        print("\nCalculating interaction energies...")
+                        computed_params.interaction_energies = self.compute_interactions(
+                            sequence=sequence, 
+                            dielectric_constants=computed_params.dielectric_constants
+                        )
+                        print("Interaction energies calculation completed.")
+
+                    # Analyze Cooperativities
+                    if 4 in selected_nums:
+                        print("\nLaunching cooperativity analysis...")
+                        cooperativity_results = self.analyze_cooperativity(
+                            sequence=sequence,
+                            existing_interactions=computed_params.interaction_energies
+                        )
+                        
+                        if cooperativity_results:
+                            # Store full results
+                            computed_params.cooperativity_results = cooperativity_results
+                            
+                            # Extract and store DG values for potential rate calculations
+                            if 'sequential' in cooperativity_results:
+                                computed_params.sequential_dg_values = [
+                                    level_results['delta_G']
+                                    for level_results in cooperativity_results['sequential']
+                                ]
+                            
+                            if 'geometric' in cooperativity_results:
+                                computed_params.geometric_dg_values = cooperativity_results['geometric']['delta_G']
+                            
+                            print("\nCooperativity analysis complete!")
+                            print(f"Results saved in: {self.ee_dir}/cooperativity_analysis/")
+
+                    # Compute electronic couplings
+                    if 5 in selected_nums:
+                        print("\nCalculating electronic couplings...")
+                        computed_params.coupling_values = self.compute_coupling(
+                            sequence, pdb_file)
+                        print("Electronic coupling calculation completed.")
+
+                    # Compute Marcus Theory Rates
+                    if 6 in selected_nums:
+                        if (not computed_params.lambda_values or 
+                            not computed_params.coupling_values):
+                            print("\nWarning: Marcus rates calculation requires:")
+                            print("- Reorganization energy (Option 1)")
+                            print("- Electronic coupling (Option 5)")
+                            print("Please calculate these quantities first.")
+                            continue
+                        
+                        print("\nCalculating Marcus theory rates...")
+                        try:
+                            computed_params.rates_forward, computed_params.rates_backward = self.compute_rates(
+                                sequence=sequence,
+                                lambda_values=computed_params.lambda_values,
+                                delta_g_values=[],  # Placeholder - will be selected during computation
+                                coupling_values=computed_params.coupling_values
+                            )
+                            print("Marcus rates calculation completed.")
+                        except Exception as e:
+                            print(f"\nError during rate calculation: {str(e)}")
+                            continue
 
             except Exception as e:
                 print(f"\nError during calculation: {str(e)}")
@@ -597,6 +675,35 @@ class EnergeticEvaluation:
             
             if not more_calcs:
                 return computed_params
+
+    def _get_manual_dielectric_constants(self) -> List[float]:
+        """
+        Get dielectric constants manually from user input.
+        This is used when we can't calculate them from reorganization energy (single heme case).
+        
+        Returns:
+            List of dielectric constants [protein_dielectric, solvent_dielectric]
+        """
+        print("\nEntering dielectric constants manually:")
+        
+        # Get protein dielectric constant
+        protein_diel = self.interaction_manager.prompt(
+            "protein_dielectric",
+            "Enter protein dielectric constant:",
+            input_type=float
+        )
+        
+        # Get solvent dielectric constant
+        solvent_diel = self.interaction_manager.prompt(
+            "solvent_dielectric",
+            "Enter solvent dielectric constant:",
+            input_type=float
+        )
+        
+        # Store in interaction manager for reuse in PBSA calculations
+        self.interaction_manager.input_dict["epsout"] = str(solvent_diel)
+        
+        return [protein_diel, solvent_diel]
 
     def compute_lambda(self, sequence: List[int], pdb_file: str) -> Tuple[List[float], List[float]]:
         """

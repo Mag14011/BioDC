@@ -230,6 +230,10 @@ def validate_titratable_residues(
 #   print(f"\nDEBUG: Using PDB file: {reordered_pdb}")
     selector = ResidueSelector(reordered_pdb.removesuffix('.pdb'), launch_dir)
     
+    # Check if automatic selection is enabled
+    input_dict = interaction_manager.get_input_dict()
+    select_all = input_dict.get("SelectAllTitratable", "").lower() in ['yes', 'y', 'true', '1']
+    
     # Dictionary mapping processed residue names to their IDs in prep
     residue_map = {
         "AS4": prep.sel_asp_ids,
@@ -241,7 +245,7 @@ def validate_titratable_residues(
     
 #   print("\nDEBUG: Previously selected residues:")
     for res_type, selected_ids in residue_map.items():
-        print(f"Selected {res_type}: {selected_ids}")
+        print(f"{res_type}: {selected_ids}")
 
     # Validate each residue type
     for res_type, selected_ids in residue_map.items():
@@ -264,7 +268,7 @@ def validate_titratable_residues(
                 interaction_manager,
                 res_type,
                 current_ids,
-                select_all=False,
+                select_all=select_all,  # Pass the select_all flag here
                 key_suffix="2"
             )
             
@@ -280,15 +284,15 @@ def validate_titratable_residues(
             elif res_type == "TYR":
                 prep.sel_tyr_ids = new_selection
 
-    # Handle PRN selection
+    # Handle PRN (heme propionic acid) selection
     prn_ids = selector.find_titratable_residues("PRN")
     if prn_ids:
-        print("\n PRN (protonated residues) are now available for titration.")
+        print("\n PRN (heme propionic acid) residues are now available for titration.")
         prep.sel_prn_ids = get_residue_selection(
             interaction_manager,
             "PRN",
             prn_ids,
-            select_all=False,
+            select_all=select_all,  # Use the select_all flag here too
             key_suffix="2"
         )
     print("=" * 60)

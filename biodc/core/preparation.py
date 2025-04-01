@@ -68,8 +68,18 @@ quit
         f"{out_prefix}_reord.pdb"
     )
 
-def generate_cpin(out_prefix: str, reordered_prmtop: str, prep: 'PreparedStructure') -> str:
-    """Generate cpin file for constant pH dynamics."""
+def generate_cpin(out_prefix: str, reordered_prmtop: str, prep: 'PreparedStructure', solv_env: str) -> Tuple[str, str]:
+    """Generate cpin file for constant pH dynamics.
+    
+    Args:
+        out_prefix: Prefix for output files
+        reordered_prmtop: Path to reordered topology file
+        prep: PreparedStructure containing residue selections
+        solv_env: Solvent environment ('exp' for explicit or 'imp' for implicit)
+        
+    Returns:
+        Tuple of (cpin_file_path, final_prmtop_path)
+    """
     res_names = []
     res_ids = []
 
@@ -93,33 +103,43 @@ def generate_cpin(out_prefix: str, reordered_prmtop: str, prep: 'PreparedStructu
         res_ids.append(prep.sel_prn_ids)
 
     if not res_names or not res_ids:
-        return None
+        return None, reordered_prmtop
 
-    cmd = [
-        "cpinutil.py",
-        "-resnames", " ".join(res_names),
-        "-resnums", " ".join(res_ids),
-        "-p", reordered_prmtop,
-        "-igb", "2",
-        "-op", f"{out_prefix}_new.prmtop",
-        "-o", f"{out_prefix}.cpin"
-    ]
-
-    subprocess.run(" ".join(cmd), shell=True, check=True)
-    subprocess.run(f"cp {out_prefix}_reord.rst7 {out_prefix}_new.rst7", shell=True, check=True)
-
-    return f"{out_prefix}.cpin"
-def structure_preparation_and_relaxation(
-    launch_dir: Path,
-    forcefield_dir: Path,
-    struc_dir: Path,
-    input_dict: Dict
-) -> Tuple[str, str]:
-    
-    interaction_manager = InteractionManager(
-        launch_dir=launch_dir,
-        input_dict=input_dict
-    )
+    # For implicit solvent, we don't need to create a new prmtop
+    if solv_env == 'imp':
+        print("A new prmtop is only necessary for explicit solvent CpHMD/pH-REMD simulations.")
+        
+        cmd = [
+            "cpinutil.py",
+            "-resnames", " ".join(res_names),
+            "-resnums", " ".join(res_ids),
+            "-p", reordered_prmtop,
+            "-igb", "2",
+            "-o", f"{out_prefix}.cpin"
+        ]
+        
+        subprocess.run(" ".join(cmd), shell=True, check=True)
+        print("CPIN generation complete!")
+        
+        # For implicit solvent, return the reordered prmtop
+        return f"{out_prefix}.cpin", reordered_prmtop
+    else:
+        # For explicit solvent, create a new prmtop
+        cmd = [
+            "cpinutil.py",
+            "-resnames", " ".join(res_names),
+            "-resnums", " ".join(res_ids),
+            "-p", reordered_prmtop,
+            "-igb", "2",
+            "-op", f"{out_prefix}_new.prmtop",
+            "-o", f"{out_prefix}.cpin"
+        ]
+        
+        subprocess.run(" ".join(cmd), shell=True, check=True)
+        subprocess.run(f"cp {out_prefix}_reord.rst7 {out_prefix}_new.rst7", shell=True, check=True)
+        
+        # For explicit solvent, return the new prmtop
+        return f"{out_prefix}.cpin", f"{out_prefix}_new.prmtop"
 
 def structure_preparation_and_relaxation(
     launch_dir: Path,
@@ -141,18 +161,18 @@ def structure_preparation_and_relaxation(
 
     # Initialize structure
     pdb = initialize(launch_dir, interaction_manager.get_input_dict())
-#   print(f"Debug - pdb {pdb}")
-     
+    print(f"Debug - pdb {pdb}")
+
     prep = PreparedStructure(pdb=pdb)
     has_titratable = False
 
     # Handle disulfide selection
-#   print("Debug before prompt - input_dict keys:", input_dict.keys())
+    print("Debug before prompt - input_dict keys:", input_dict.keys())
     if interaction_manager.yes_no_prompt(
         "SelDisulfides",
         "\nAre there disulfide linkages in your structure?"
     ):
-#       print("Debug after prompt - input_dict keys:", input_dict.keys())
+        print("Debug after prompt - input_dict keys:", input_dict.keys())
         prep.disulf_list, prep.disulf_array = select_disulfides(
             prep.pdb,  # Pass the PDB name directly
             interaction_manager.get_input_dict(),
@@ -178,6 +198,19 @@ def structure_preparation_and_relaxation(
     ):
         has_titratable = True
         current_dict = interaction_manager.get_input_dict()
+
+        # Add prompt for automatic selection of all titratable residues
+        select_all = interaction_manager.yes_no_prompt(
+            "SelectAllTitratable",
+            "\nWould you like to automatically select all available\n"
+            " titratable residues? (This will select all ASP, GLU, HIS,\n"
+            " LYS, TYR, and PRN residues that can be titrated.)"
+        )
+
+        # If the user selected yes, we need to update the current dictionary
+        if select_all:
+            current_dict["SelectAllTitratable"] = "yes"
+            print("\n All available titratable residues will be automatically selected.")
 
         # Check for automatic selection of all titratable residues
         select_all = current_dict.get("SelectAllTitratable", "").lower() in ['yes', 'y', 'true', '1']
@@ -213,14 +246,14 @@ def structure_preparation_and_relaxation(
         prep.sel_prn_ids = ""
 
     # Process the structure
-#   print(f"file = {prep.pdb}")
+    print(f"file = {prep.pdb}")
     prep.pdb = create_res_indexing(
         prep.pdb, interaction_manager.get_input_dict(), launch_dir
     )
 #   print(f"file = {prep.pdb}")
 
     # Process the structure and get required info for tleap
-#   print(f"file = {prep.pdb}")
+    print(f"file = {prep.pdb}")
     structure_info, indexing_data = process_residue_indexing(
         prep.pdb, prep.disulf_list,
         prep.sel_asp_ids, prep.sel_glu_ids, prep.sel_his_ids,
@@ -228,11 +261,11 @@ def structure_preparation_and_relaxation(
         interaction_manager.get_input_dict(), launch_dir
     )
 #   print(f"file = {prep.pdb}")
-    
+
     # Generate tleap input and run
     out_prefix, solv_env = generate_tleap.generate_tleap_input(
         prep.pdb,
-        forcefield_dir, 
+        forcefield_dir,
         structure_info,
         indexing_data,
         interaction_manager.get_input_dict(),
@@ -240,19 +273,14 @@ def structure_preparation_and_relaxation(
     )
 
     # Reorder the structure
-    print("\n")
-    print("=" * 60)
-    print("Reordering residues for consistency with molecular dynamics requirements...")
+    print("\n Reordering residues for consistency with molecular dynamics requirements...")
     reordered_prmtop, original_pdb, reordered_pdb = reorder_structure(out_prefix)
     final_prmtop = reordered_prmtop
     print(f" Created reordered topology: {reordered_prmtop}")
-    print("=" * 60)
 
     # Validate titratable residues after reordering
     if has_titratable:
-        print("\n")
-        print("=" * 60)
-        print("Validating titratable residue selections after reordering...")
+        print("\n Validating titratable residue selections after reordering...")
         prep = validate_titratable_residues(
             reordered_pdb,
             prep,
@@ -262,20 +290,15 @@ def structure_preparation_and_relaxation(
 
     # Generate cpin file if needed
     if has_titratable:
-        print("\n")
-        print("=" * 60)
-        print("Generating cpin file for constant pH dynamics...")
-        print("=" * 60)
-        cpin_file = generate_cpin(out_prefix, reordered_prmtop, prep)
-        final_prmtop = f"{out_prefix}_new.prmtop"
+        print("\n Generating cpin file for constant pH dynamics...")
+        cpin_file, final_prmtop = generate_cpin(out_prefix, reordered_prmtop, prep, solv_env)
         print(f" Created cpin file: {cpin_file}")
-        print(f" Created modified topology for constant pH: {final_prmtop}")
+        if solv_env == 'imp':
+            print(f" Using reordered topology for constant pH: {final_prmtop}")
+        else:
+            print(f" Created modified topology for constant pH: {final_prmtop}")
 
     # Run structure relaxation
-    print("\n")
-    print("=" * 60)
-    print("Structure Relaxation")
-    print("=" * 60)
     struct_relax(
         launch_dir, struc_dir, final_prmtop.removesuffix('.prmtop'), solv_env, interaction_manager.get_input_dict()
     )

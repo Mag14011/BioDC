@@ -467,6 +467,68 @@ def select_pdb(launch_dir: Path, input_dict: Dict) -> str:
         input_dict=input_dict
     )
 
+    # Check if we're running in non-interactive mode with an input file
+    input_file_exists = (launch_dir / "input.txt").exists()
+
+    # If we already have a PDB in the input dictionary and input.txt exists, use it directly
+    if "OriginalPDB" in input_dict and input_file_exists:
+        original_pdb = input_dict["OriginalPDB"]
+        print(f"\n Using PDB from input file: {original_pdb}")
+
+        pdb_filename = f"{original_pdb}.pdb"
+        pdb_path = launch_dir / pdb_filename
+        current_dir = Path.cwd()
+
+        # If SPR directory wasn't pre-created, create it
+        if not current_dir.name == 'SPR':
+            spr_dir = launch_dir / 'SPR'
+            spr_dir.mkdir(exist_ok=True)
+            current_dir = spr_dir
+            os.chdir(current_dir)
+
+        if pdb_path.is_file():
+            dest_path = current_dir / pdb_filename
+            if not dest_path.is_file():
+                shutil.copy2(pdb_path, dest_path)
+                print(f"\n PDB copied to current working directory: {dest_path}")
+
+            if check_consecutive_residues(str(dest_path)):
+                print("\n PDB has consecutive residue numbering. No renumbering needed.")
+
+                # Skip structure analysis in non-interactive mode
+                if input_file_exists:
+                    print("\n Skipping structure analysis in non-interactive mode.")
+                else:
+                    # Structure analysis on original structure
+                    print("\nAnalyzing structure composition and secondary structure...")
+                    analyze_structure(str(dest_path))
+
+                return original_pdb
+
+            print("\n Residues are not consecutively numbered. Attempting to renumber...")
+            renumbered_path = renumber_consecutive_residues(str(dest_path))
+            print(f"\n PDB renumbered and saved as: {renumbered_path}")
+
+            # Update OriginalPDB to the new renumbered name
+            input_dict["OriginalPDB"] = Path(renumbered_path).stem
+
+            # Skip structure analysis in non-interactive mode
+            if input_file_exists:
+                print("\n Skipping structure analysis in non-interactive mode.")
+            else:
+                # Structure analysis on renumbered structure
+                print("\nAnalyzing structure composition and secondary structure...")
+                analyze_structure(str(renumbered_path))
+
+            return Path(renumbered_path).stem
+        else:
+            # If in non-interactive mode but PDB doesn't exist, we should error out
+            if input_file_exists:
+                raise FileNotFoundError(f"PDB file specified in input.txt ({pdb_filename}) not found.")
+            print("\n That PDB does not exist unfortunately")
+            # Continue to interactive selection below
+
+    # Interactive PDB selection (only reached if no valid PDB in input_dict or PDB not found)
     print(f"\n Good! Here are the PDBs in the launch directory ({launch_dir}) :\n")
     pdb_files = [x for x in os.listdir(launch_dir) if x.endswith(".pdb")]
 
@@ -482,11 +544,11 @@ def select_pdb(launch_dir: Path, input_dict: Dict) -> str:
             "\nWhich PDB would you like to setup (omit the .pdb file extension)?",
             allow_empty=False
         )
-        
+
         pdb_filename = f"{original_pdb}.pdb"
         pdb_path = launch_dir / pdb_filename
         current_dir = Path.cwd()
-        
+
         # If SPR directory wasn't pre-created, create it
         if not current_dir.name == 'SPR':
             spr_dir = launch_dir / 'SPR'
@@ -499,7 +561,7 @@ def select_pdb(launch_dir: Path, input_dict: Dict) -> str:
             if not dest_path.is_file():
                 shutil.copy2(pdb_path, dest_path)
                 print(f"\n PDB copied to current working directory: {dest_path}")
-    
+
             if check_consecutive_residues(str(dest_path)):
                 print("\n PDB has consecutive residue numbering. No renumbering needed.")
 
@@ -508,14 +570,14 @@ def select_pdb(launch_dir: Path, input_dict: Dict) -> str:
                 analyze_structure(str(dest_path))
 
                 return original_pdb
-            
+
             print("\n Residues are not consecutively numbered. Attempting to renumber...")
             renumbered_path = renumber_consecutive_residues(str(dest_path))
             print(f"\n PDB renumbered and saved as: {renumbered_path}")
-           
+
             # Update OriginalPDB to the new renumbered name
             input_dict["OriginalPDB"] = Path(renumbered_path).stem
-            
+
             # Structure analysis on renumbered structure
             print("\nAnalyzing structure composition and secondary structure...")
             analyze_structure(str(renumbered_path))
@@ -528,11 +590,11 @@ def initialize(launch_dir: Path, input_dict: Dict) -> str:
     """
     Main initialization function.
     Verifies programs are in PATH and selects PDB file.
-    
+
     Args:
         launch_dir: Directory where script is launched
         input_dict: Dictionary of input parameters
-    
+
     Returns:
         Base name of the selected PDB file
     """
@@ -543,4 +605,5 @@ def initialize(launch_dir: Path, input_dict: Dict) -> str:
     # Select and validate PDB, getting updated input_dict
     original_pdb = select_pdb(launch_dir, input_dict)
 
-    return original_pdb 
+    return original_pdb
+

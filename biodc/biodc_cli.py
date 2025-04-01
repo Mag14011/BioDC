@@ -184,28 +184,28 @@ Third: Kinetic Evaluation
 
     def run_workflow(self) -> WorkflowParameters:
         print(f"""
-================================================================== 
-                       Welcome to BioDC
-            A program that automates and accelerates
-              the computation of redox currents in
-               (polymeric) multi-heme cytochromes 
+    ================================================================== 
+                        Welcome to BioDC
+                A program that automates and accelerates
+                the computation of redox currents in
+                (polymeric) multi-heme cytochromes 
 
-   Written by Matthew J. Guberman-Pfeffer and Caleb L. Herron
-                 Last Updated: 7/15/2024
+    Written by Matthew J. Guberman-Pfeffer and Caleb L. Herron
+                    Last Updated: 03/31/2025
 
-Start time: {datetime.now()}
-Directory paths:
-  Program:                    {self.launch_dir}
-  Current working directory:  {os.getcwd()}
-================================================================== 
+    Start time: {datetime.now()}
+    Directory paths:
+    Program:                    {self.launch_dir}
+    Current working directory:  {os.getcwd()}
+    ================================================================== 
 
-BioDC presents a highly modular workflow that has three 
-major divisions: 
-   (1) Structure Preparation & Relaxation
-   (2) Energetic Evaluation
-   (3) Kinetic Evaluation
-""")
-       
+    BioDC presents a highly modular workflow that has three 
+    major divisions: 
+    (1) Structure Preparation & Relaxation
+    (2) Energetic Evaluation
+    (3) Kinetic Evaluation
+    """)
+    
         division = self.session.prompt(
             "DivSel",
             "\n Which of these divisions would you like to perform?\n"
@@ -213,23 +213,45 @@ major divisions:
             " workflow.) (0/1/2/3)",
             choices=['0', '1', '2', '3']
         )
-       
+    
         try:
-            if division in ('0', '1'):
+            # Option to run entire workflow
+            if division == '0':
                 self.prepare_structure()
-           
-            if division in ('0', '2'):
-                if division == '0':
-                    os.chdir(self.launch_dir)
+                os.chdir(self.launch_dir)
                 self.evaluate_energetics()
-           
-            if division in ('0', '3'):
-                if division == '0':
-                    os.chdir(self.launch_dir)
+                os.chdir(self.launch_dir)
                 self.evaluate_kinetics()
-           
-            if division not in ('0', '1', '2', '3'):
-                sys.exit("\n Please re-launch BioDC and select one of the available modules.")
+            else:
+                # Sequential execution with option to continue
+                current_div = int(division)
+                
+                while current_div <= 3:
+                    if current_div == 1:
+                        self.prepare_structure()
+                    elif current_div == 2:
+                        os.chdir(self.launch_dir)
+                        self.evaluate_energetics()
+                    elif current_div == 3:
+                        os.chdir(self.launch_dir)
+                        self.evaluate_kinetics()
+                    
+                    # Check if we should continue to next division
+                    if current_div < 3:
+                        continue_next = self.session.yes_no_prompt(
+                            f"continue_to_div_{current_div + 1}",
+                            f"\nDivision {current_div} completed. Would you like to continue to "
+                            f"Division {current_div + 1}: "
+                            f"{'Energetic Evaluation' if current_div == 1 else 'Kinetic Evaluation'}?"
+                        )
+                        
+                        if continue_next:
+                            current_div += 1
+                        else:
+                            break
+                    else:
+                        # All divisions completed
+                        break
         
         except Exception as e:
             print(f"Detailed error: {e}")

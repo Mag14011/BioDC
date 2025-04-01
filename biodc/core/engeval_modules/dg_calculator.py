@@ -67,7 +67,7 @@ class DeltaGCalculator:
         self.pdb_file = str(Path(pdb_file))  # Convert to string after validating
         self.ee_dir = launch_dir / "EE"
         self.ee_dir.mkdir(exist_ok=True)
-        
+
     def compute_reaction_free_energy(
         self,
         sequence: List[int],
@@ -77,6 +77,7 @@ class DeltaGCalculator:
     ) -> List[float]:
         """
         Compute reaction free energy for sequence of hemes.
+        Handles both multi-heme and single-heme cases.
         
         Args:
             sequence: List of heme residue IDs
@@ -85,8 +86,16 @@ class DeltaGCalculator:
             n_parallel: Number of parallel PBSA calculations (None for serial)
             
         Returns:
-            List of reaction free energies for each transfer step
+            List of reaction free energies for each transfer step, or a list with a single
+            value representing the redox potential for a single heme
         """
+        # Check if we're dealing with a single heme
+        is_single_heme = len(sequence) == 1
+        
+        if is_single_heme:
+            print(f"\nSingle heme detected (ID: {sequence[0]})")
+            print("Computing redox potential for this heme...")
+            
         # Method selection
         method = self.interaction_manager.prompt(
             "dg_method",
@@ -98,7 +107,10 @@ class DeltaGCalculator:
         )
         
         if method == '2':
-            return self._get_manual_dg_values(sequence, is_cyclic)
+            if is_single_heme:
+                return self._get_manual_redox_potential(sequence[0])
+            else:
+                return self._get_manual_dg_values(sequence, is_cyclic)
             
         # Get reference state
         ref_state = self._get_reference_state()
@@ -118,12 +130,79 @@ class DeltaGCalculator:
             sequence, heme_dielectrics, calc_type, n_parallel)
             
         # Compute and return DG values
-        results = self._compute_dg_values(energies, sequence, is_cyclic)
+        if is_single_heme:
+            results = self._compute_single_heme_redox_potential(energies, sequence[0])
+        else:
+            results = self._compute_dg_values(energies, sequence, is_cyclic)
 
         # Display results automatically
-        self.display_results(sequence, results, is_cyclic)
+        if is_single_heme:
+            self.display_single_heme_results(sequence[0], results[0])
+        else:
+            self.display_results(sequence, results, is_cyclic)
 
         return results
+
+    def _get_manual_redox_potential(self, heme_id: int) -> List[float]:
+        """
+        Get manually entered redox potential for a single heme.
+        
+        Args:
+            heme_id: ID of the single heme
+            
+        Returns:
+            List containing the single redox potential value
+        """
+        value = self.interaction_manager.prompt(
+            f"redox_potential_manual_{heme_id}",
+            f"Enter redox potential (eV) for HEM-{heme_id}: ",
+            input_type=float
+        )
+        
+        # Write to DG.txt
+        with open(self.ee_dir / 'DG.txt', 'w') as f:
+            f.write(f"Manual entry: HEM-{heme_id} redox potential = {value:.3f} eV\n")
+        
+        return [value]
+
+    def _compute_single_heme_redox_potential(self, 
+                                            energies: Dict[int, Tuple[float, float]],
+                                            heme_id: int) -> List[float]:
+        """
+        Compute redox potential for a single heme.
+        
+        Args:
+            energies: Dict mapping heme_id to (E_ox, E_red) tuple
+            heme_id: ID of the single heme
+            
+        Returns:
+            List containing the single redox potential value
+        """
+        # Calculate energy difference between oxidized and reduced states
+        # E_oxidized - E_reduced
+        redox_potential = energies[heme_id][0] - energies[heme_id][1]
+        
+        # Write to DG.txt
+        with open(self.ee_dir / 'DG.txt', 'w') as f:
+            f.write(f"HEM-{heme_id} redox potential = {redox_potential:.3f} eV\n")
+        
+        return [redox_potential]
+
+    def display_single_heme_results(self, heme_id: int, redox_potential: float):
+        """
+        Display the redox potential results for a single heme.
+        
+        Args:
+            heme_id: ID of the single heme
+            redox_potential: Calculated redox potential value
+        """
+        print("\n" + "=" * 50)
+        print(f"Redox Potential for Heme {heme_id}")
+        print("=" * 50)
+        print(f"\nHEM-{heme_id} redox potential = {redox_potential:.3f} eV")
+        print("\nThis value represents the energy difference between")
+        print("the oxidized and reduced states (E_oxidized - E_reduced).")
+        print("\nResult also saved in EE/DG.txt")
 
     def _get_reference_state(self) -> RedoxState:
         """Get user's choice of reference state."""
@@ -296,12 +375,17 @@ class DeltaGCalculator:
         calc_type: CalculationType
     ) -> PBSAParameters:
         """Get PBSA parameters for a specific heme."""
-        # Get common parameters
-        epsout = self.interaction_manager.prompt(
-            f"epsout_{heme_id}",
-            f"Enter external dielectric constant for heme-{heme_id}: ",
-            input_type=float
-        )
+        # Check if external dielectric is already in input_dict (from single heme workflow)
+        if "epsout" in self.interaction_manager.input_dict:
+            epsout = float(self.interaction_manager.input_dict["epsout"])
+            print(f"Using previously entered external dielectric constant: {epsout}")
+        else:
+            # Get common parameters
+            epsout = self.interaction_manager.prompt(
+                f"epsout_{heme_id}",
+                f"Enter external dielectric constant for heme-{heme_id}: ",
+                input_type=float
+            )
         
         istrng = self.interaction_manager.prompt(
             f"istrng_{heme_id}",
